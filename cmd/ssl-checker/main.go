@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/russmckendrick/ssl-toolkit/internal/certificate"
 	"github.com/russmckendrick/ssl-toolkit/internal/dns"
@@ -216,15 +217,189 @@ func handleCheck(w http.ResponseWriter, r *http.Request) {
                         <span class="text-red-600">❌ Invalid</span>
                     {{end}}</p>
                 </div>
+                <div>
+                    <p class="font-semibold">Trust Status:</p>
+                    <p>{{if eq .Certificate.TrustStatus "trusted"}}
+                        <span class="text-green-600">✅ Certificate chain is trusted</span>
+                    {{else if eq .Certificate.TrustStatus "revoked"}}
+                        <span class="text-red-600">🚫 Certificate has been revoked</span>
+                    {{else if eq .Certificate.TrustStatus "untrusted_root"}}
+                        <span class="text-yellow-600">⚠️ Chain contains untrusted root</span>
+                    {{else if eq .Certificate.TrustStatus "expired"}}
+                        <span class="text-red-600">📛 Certificate has expired</span>
+                    {{else if eq .Certificate.TrustStatus "valid"}}
+                        <span class="text-yellow-600">⚠️ Certificate appears valid but chain verification incomplete</span>
+                    {{else}}
+                        <span class="text-red-600">❌ Certificate validation failed</span>
+                    {{end}}</p>
+                </div>
+                {{if .Certificate.ValidationError}}
+                <div class="col-span-2">
+                    <p class="font-semibold text-yellow-600">⚠️ Validation Note:</p>
+                    <p class="text-gray-600">{{.Certificate.ValidationError}}</p>
+                </div>
+                {{end}}
+            </div>
+        </div>
+
+        {{if .Certificate.SubjectAltNames}}
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h3 class="text-xl font-bold mb-4">🔄 Subject Alternative Names</h3>
+            <div class="grid grid-cols-1 gap-2">
+                {{range .Certificate.SubjectAltNames}}
+                <p class="text-gray-600">{{.}}</p>
+                {{end}}
             </div>
         </div>
         {{end}}
+        {{end}}
 
-        <!-- Add more sections for HPKP, Chain, and DNS info -->
+        {{if .HPKP}}
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-2xl font-bold mb-4">📌 HPKP Information</h2>
+            {{if .HPKP.HasHPKP}}
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <p class="font-semibold">Status:</p>
+                    <p class="text-green-600">✅ HPKP is enabled</p>
+                </div>
+                {{if .HPKP.ReportOnly}}
+                <div>
+                    <p class="font-semibold">Mode:</p>
+                    <p class="text-yellow-600">⚠️ Report-Only Mode</p>
+                </div>
+                {{end}}
+                <div>
+                    <p class="font-semibold">Max Age:</p>
+                    <p>{{.HPKP.MaxAge}} seconds</p>
+                </div>
+                {{if .HPKP.IncludeSubDomains}}
+                <div>
+                    <p class="font-semibold">Scope:</p>
+                    <p>🔄 Includes Subdomains</p>
+                </div>
+                {{end}}
+                {{if .HPKP.ReportURI}}
+                <div class="col-span-2">
+                    <p class="font-semibold">Report URI:</p>
+                    <p>{{.HPKP.ReportURI}}</p>
+                </div>
+                {{end}}
+                {{if .HPKP.Pins}}
+                <div class="col-span-2">
+                    <p class="font-semibold mb-2">Pin Values:</p>
+                    {{range .HPKP.Pins}}
+                    <p class="text-gray-600 text-sm font-mono mb-1">{{.}}</p>
+                    {{end}}
+                </div>
+                {{end}}
+            </div>
+            {{else}}
+            <p class="text-yellow-600">❌ HPKP is not enabled</p>
+            {{end}}
+        </div>
+        {{end}}
+
+        {{if .Chain}}
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-2xl font-bold mb-4">🔗 Certificate Chain</h2>
+            {{range $index, $cert := .Chain}}
+            <div class="mb-6 {{if gt $index 0}}pt-6 border-t border-gray-200{{end}}">
+                <h3 class="text-xl font-bold mb-4">📜 Certificate {{add $index 1}}</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="font-semibold">Version:</p>
+                        <p>{{.Version}}</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold">Serial Number:</p>
+                        <p class="font-mono text-sm">{{.SerialNumber}}</p>
+                    </div>
+                    <div class="col-span-2">
+                        <p class="font-semibold">Subject:</p>
+                        <p>{{.Subject.CommonName}}</p>
+                        {{if .Subject.Organization}}
+                        <p class="text-sm text-gray-600">{{join .Subject.Organization ", "}}</p>
+                        {{end}}
+                    </div>
+                    <div class="col-span-2">
+                        <p class="font-semibold">Issuer:</p>
+                        <p>{{.Issuer.CommonName}}</p>
+                        {{if .Issuer.Organization}}
+                        <p class="text-sm text-gray-600">{{join .Issuer.Organization ", "}}</p>
+                        {{end}}
+                    </div>
+                    <div>
+                        <p class="font-semibold">Valid From:</p>
+                        <p>{{.NotBefore.Format "2006-01-02 15:04:05 UTC"}}</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold">Valid Until:</p>
+                        <p>{{.NotAfter.Format "2006-01-02 15:04:05 UTC"}}</p>
+                    </div>
+                </div>
+            </div>
+            {{end}}
+        </div>
+        {{end}}
+
+        {{if .DNS}}
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-2xl font-bold mb-4">🌐 DNS Information</h2>
+            {{if .DNS.IPv4Addresses}}
+            <div class="mb-6">
+                <h3 class="text-xl font-bold mb-4">📍 IPv4 Addresses</h3>
+                <div class="grid grid-cols-1 gap-2">
+                    {{range .DNS.IPv4Addresses}}
+                    <p class="font-mono">{{.}}</p>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+
+            {{if .DNS.IPv6Addresses}}
+            <div class="mb-6">
+                <h3 class="text-xl font-bold mb-4">📍 IPv6 Addresses</h3>
+                <div class="grid grid-cols-1 gap-2">
+                    {{range .DNS.IPv6Addresses}}
+                    <p class="font-mono">{{.}}</p>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+
+            {{if .DNS.IPDetails}}
+            <div>
+                <h3 class="text-xl font-bold mb-4">🌍 IP Information</h3>
+                <div class="grid grid-cols-1 gap-6">
+                    {{range .DNS.IPDetails}}
+                    <div class="border-t border-gray-200 pt-4">
+                        <p class="font-semibold">🔍 {{.IP}}</p>
+                        <div class="grid grid-cols-2 gap-2 mt-2">
+                            <p><span class="font-semibold">Country:</span> {{.Country}}</p>
+                            <p><span class="font-semibold">City:</span> {{.City}}</p>
+                            <p class="col-span-2"><span class="font-semibold">Organization:</span> {{.Organization}}</p>
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+        </div>
+        {{end}}
     </div>
 </body>
 </html>
 `
-	t := template.Must(template.New("result").Parse(tmpl))
-	t.Execute(w, result)
+
+// Add template functions
+funcMap := template.FuncMap{
+	"add": func(a, b int) int {
+		return a + b
+	},
+	"join": strings.Join,
+}
+
+t := template.Must(template.New("result").Funcs(funcMap).Parse(tmpl))
+t.Execute(w, result)
 } 
