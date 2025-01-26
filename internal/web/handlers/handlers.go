@@ -40,7 +40,31 @@ func HandleCheck(w http.ResponseWriter, r *http.Request) {
 
 	result := WebResult{Domain: domain}
 
-	// ... rest of the check handler logic ...
+	// Get certificate info
+	certInfo, err := certificate.GetCertificateInfo(domain)
+	if err == nil {
+		result.Certificate = certInfo
+
+		// Get certificate chain regardless of validation status
+		chain, err := certificate.GetCertificateChain(domain)
+		if err == nil {
+			result.Chain = chain
+		}
+	}
+
+	// Get HPKP info
+	hpkpInfo, err := hpkp.CheckHPKP(domain)
+	if err == nil {
+		result.HPKP = hpkpInfo
+	}
+
+	// Only get DNS info if certificate is valid
+	if certInfo != nil && certInfo.IsValid() {
+		dnsInfo, err := dns.GetDNSInfo(domain)
+		if err == nil {
+			result.DNS = dnsInfo
+		}
+	}
 
 	// Add template functions
 	funcMap := template.FuncMap{
