@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"net"
 	"time"
+	"crypto/pkix"
 )
 
 type CertificateInfo struct {
 	Version            int
 	SerialNumber      string
-	Subject           x509.Name
-	Issuer            x509.Name
+	Subject           pkix.Name
+	Issuer            pkix.Name
 	NotBefore         time.Time
 	NotAfter          time.Time
 	SignatureAlg      x509.SignatureAlgorithm

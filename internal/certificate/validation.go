@@ -3,6 +3,7 @@ package certificate
 import (
 	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"time"
 )
@@ -43,11 +44,17 @@ func checkCRL(cert *x509.Certificate) error {
 	for _, url := range cert.CRLDistributionPoints {
 		resp, err := client.Get(url)
 		if err != nil {
-			continue // Try next CRL if this one fails
+			continue
 		}
 		defer resp.Body.Close()
 
-		crl, err := x509.ParseCRL(resp.Body)
+		// Read the body into a byte slice
+		crlBytes, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			continue
+		}
+
+		crl, err := x509.ParseCRL(crlBytes)
 		if err != nil {
 			continue
 		}

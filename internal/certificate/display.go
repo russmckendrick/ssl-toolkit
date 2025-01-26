@@ -1,6 +1,7 @@
 package certificate
 
 import (
+	"crypto/x509/pkix"
 	"fmt"
 	"strings"
 	"time"
@@ -90,20 +91,20 @@ func DisplayCertificateChain(chain []*CertificateInfo) {
 	}
 }
 
-func displayName(name x509.Name) {
+func displayName(name pkix.Name) {
 	if name.CommonName != "" {
 		fmt.Printf("  CommonName: %s\n", name.CommonName)
 	}
-	if name.Organization != nil {
+	if len(name.Organization) > 0 {
 		fmt.Printf("  Organization: %s\n", strings.Join(name.Organization, ", "))
 	}
-	if name.Country != nil {
+	if len(name.Country) > 0 {
 		fmt.Printf("  Country: %s\n", strings.Join(name.Country, ", "))
 	}
-	if name.Locality != nil {
+	if len(name.Locality) > 0 {
 		fmt.Printf("  Locality: %s\n", strings.Join(name.Locality, ", "))
 	}
-	if name.Province != nil {
+	if len(name.Province) > 0 {
 		fmt.Printf("  Province: %s\n", strings.Join(name.Province, ", "))
 	}
 } 
