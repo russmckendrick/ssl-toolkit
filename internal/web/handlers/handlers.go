@@ -3,6 +3,7 @@ package handlers
 import (
 	"html/template"
 	"net/http"
+	"reflect"
 	"strings"
 
 	"github.com/russmckendrick/ssl-toolkit/internal/certificate"
@@ -75,6 +76,8 @@ func HandleCheck(w http.ResponseWriter, r *http.Request) {
 	funcMap := template.FuncMap{
 		"add":  func(a, b int) int { return a + b },
 		"join": strings.Join,
+		"sub":  func(a, b int) int { return a - b },
+		"len":  func(s interface{}) int { return reflect.ValueOf(s).Len() },
 	}
 
 	t := template.Must(template.New("result").Funcs(funcMap).Parse(templates.ResultTemplate))

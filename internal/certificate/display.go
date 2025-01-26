@@ -60,10 +60,32 @@ func DisplayCertificateInfo(cert *CertificateInfo) {
 
 func DisplayCertificateChain(chain []*CertificateInfo) {
 	bold := color.New(color.Bold)
-
 	fmt.Println("\n=== 🔗 Certificate Chain ===")
+
+	// First display the chain visualization
+	fmt.Println("\nChain Structure:")
 	for i, cert := range chain {
-		bold.Printf("\n📜 Certificate %d:\n", i+1)
+		// Print the current certificate
+		prefix := "└── "
+		if i < len(chain)-1 {
+			prefix = "├── "
+		}
+		indent := strings.Repeat("│   ", i)
+		fmt.Printf("%s%s%s\n", indent, prefix, cert.Subject.CommonName)
+		
+		// Print organization if available
+		if len(cert.Subject.Organization) > 0 {
+			orgPrefix := "    "
+			if i < len(chain)-1 {
+				orgPrefix = "│   "
+			}
+			fmt.Printf("%s%s(%s)\n", indent, orgPrefix, strings.Join(cert.Subject.Organization, ", "))
+		}
+	}
+
+	// Then display detailed information for each certificate
+	for i, cert := range chain {
+		fmt.Printf("\n📜 Certificate %d:\n", i+1)
 		bold.Printf("📌 Version: ")
 		fmt.Printf("%d\n", cert.Version)
 		bold.Printf("🔑 Serial Number: ")
