@@ -5,7 +5,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"fmt"
-	"net"
+	"strings"
 	"time"
 )
 
@@ -56,12 +56,39 @@ func GetCertificateInfo(domain string) (*CertificateInfo, error) {
 		SignatureAlg: cert.SignatureAlgorithm,
 	}
 
-	// Validate certificate
+	// First check if the certificate is within its validity period
+	now := time.Now()
+	if now.Before(cert.NotBefore) || now.After(cert.NotAfter) {
+		info.IsValidated = false
+		info.TrustStatus = "expired"
+		info.ValidationError = "certificate is not within its validity period"
+		return info, nil
+	}
+
+	// Then validate the certificate chain
 	if err := validateCertificate(domain, cert); err != nil {
 		info.IsValidated = false
 		info.ValidationError = err.Error()
+
+		// Check specific error types
+		switch {
+		case strings.Contains(err.Error(), "certificate has expired"):
+			info.TrustStatus = "expired"
+		case strings.Contains(err.Error(), "certificate is revoked"):
+			info.TrustStatus = "revoked"
+		case strings.Contains(err.Error(), "self signed"):
+			info.TrustStatus = "untrusted_root"
+		default:
+			info.TrustStatus = "valid" // Changed from "invalid" since the cert might be valid even if we can't verify it
+		}
 	} else {
 		info.IsValidated = true
+		info.TrustStatus = "trusted"
+	}
+
+	// Add Subject Alternative Names if present
+	if len(cert.DNSNames) > 0 {
+		info.SubjectAltNames = cert.DNSNames
 	}
 
 	return info, nil

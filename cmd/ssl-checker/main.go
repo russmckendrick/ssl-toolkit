@@ -16,7 +16,7 @@ func main() {
 		Use:   "ssl-checker [domain]",
 		Short: "SSL Certificate Checker",
 		Long:  `A tool for checking SSL certificates, certificate chains, and DNS information for domains.`,
-		Args:  cobra.MinOptionalArgs(1),
+		Args:  cobra.MinimumNArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			var domain string
 			if len(args) > 0 {

@@ -29,10 +29,8 @@ func DisplayCertificateInfo(cert *CertificateInfo) {
 
 	if isExpired {
 		red.Println("📛 Certificate Status: Expired")
-	} else if cert.IsValidated {
-		green.Println("✅ Certificate Status: Valid and Trusted")
 	} else {
-		red.Println("❌ Certificate Status: Invalid")
+		green.Println("✅ Certificate Status: Valid")
 	}
 
 	// Display trust status
@@ -48,13 +46,15 @@ func DisplayCertificateInfo(cert *CertificateInfo) {
 		yellow.Println("⚠️  Trust Status: Certificate chain contains untrusted root")
 	case "expired":
 		red.Println("📛 Trust Status: Certificate has expired")
+	case "valid":
+		yellow.Println("⚠️  Trust Status: Certificate appears valid but chain verification incomplete")
 	default:
 		red.Println("❌ Trust Status: Certificate validation failed")
 	}
 
 	if !cert.IsValidated {
-		yellow.Println("\n⚠️  Warning: Certificate verification failed")
-		red.Printf("❌ Reason: %s\n", cert.ValidationError)
+		yellow.Println("\n⚠️  Note: Full chain verification not possible")
+		yellow.Printf("Reason: %s\n", cert.ValidationError)
 	}
 }
 
