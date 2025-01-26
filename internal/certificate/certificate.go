@@ -3,10 +3,10 @@ package certificate
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"fmt"
 	"net"
 	"time"
-	"crypto/pkix"
 )
 
 type CertificateInfo struct {
