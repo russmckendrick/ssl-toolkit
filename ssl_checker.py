@@ -10,6 +10,7 @@ import warnings
 from cryptography.x509.oid import NameOID
 import idna
 import sys
+from urllib.parse import urlparse
 
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
@@ -267,13 +268,63 @@ def check_hpkp(domain: str) -> Dict:
     except Exception as e:
         return {'error': str(e)}
 
+def clean_domain(input_domain: str) -> str:
+    """Clean and validate domain input."""
+    try:
+        # Remove any whitespace
+        domain = input_domain.strip()
+        
+        # Check if it's a URL
+        if '://' in domain:
+            parsed = urlparse(domain)
+            domain = parsed.netloc
+        else:
+            # Remove any protocol prefix if user entered without //
+            if domain.startswith('http:'):
+                domain = domain[5:]
+            elif domain.startswith('https:'):
+                domain = domain[6:]
+            
+            # Remove any paths and query parameters
+            domain = domain.split('/')[0]
+            domain = domain.split('?')[0]
+            domain = domain.split('#')[0]
+        
+        # Remove any trailing dots
+        domain = domain.rstrip('.')
+        
+        # Basic domain validation
+        if not domain or '.' not in domain:
+            raise ValueError("Invalid domain format")
+        
+        # Remove any port numbers if present
+        domain = domain.split(':')[0]
+        
+        # Convert to punycode if needed
+        try:
+            domain = idna.encode(domain).decode('ascii')
+        except:
+            pass
+        
+        return domain
+    except Exception as e:
+        raise ValueError(f"Invalid domain: {str(e)}")
+
 def main():
     # Get domain from command line argument or prompt
     if len(sys.argv) > 1:
-        domain = sys.argv[1].strip()
+        input_domain = sys.argv[1].strip()
     else:
-        domain = input("Enter domain name (e.g., example.com): ").strip()
+        input_domain = input("Enter domain name (e.g., example.com): ").strip()
     
+    try:
+        domain = clean_domain(input_domain)
+    except ValueError as e:
+        print(f"❌ Error: {str(e)}")
+        print("Please enter a valid domain name (e.g., example.com)")
+        return
+    
+    print(f"\nChecking domain: {domain}")
     print("\n=== 🔒 SSL Certificate Information ===")
     cert_info = get_certificate_info(domain)
     if 'error' not in cert_info:

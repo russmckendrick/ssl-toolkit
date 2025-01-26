@@ -40,6 +40,22 @@ python ssl_checker.py example.com
 python ssl_checker.py
 ```
 
+The script accepts various input formats and will automatically clean the domain:
+
+```bash
+# All these formats work:
+python ssl_checker.py www.example.com
+python ssl_checker.py https://www.example.com
+python ssl_checker.py http://www.example.com/path/to/page
+python ssl_checker.py www.example.com:443
+python ssl_checker.py https://www.example.com/blog/post?id=123
+```
+
+The script will extract just the domain name from any URL format. For example:
+- `https://www.russ.cloud/2025/01/12/personal-project-updates-and-ai-editors/` → `www.russ.cloud`
+- `https://example.com:443/path?query=123` → `example.com`
+- `http://subdomain.example.com/` → `subdomain.example.com`
+
 ## Example Output
 
 ```
