@@ -27,7 +27,8 @@ type IPWhoIsResponse struct {
 type DNSInfo struct {
 	IPv4Addresses []string
 	IPv6Addresses []string
-	IPDetails     []IPInfo
+	IPv4Details   []IPInfo
+	IPv6Details   []IPInfo
 }
 
 func GetDNSInfo(domain string) (*DNSInfo, error) {
@@ -39,12 +40,13 @@ func GetDNSInfo(domain string) (*DNSInfo, error) {
 	}
 
 	// Get IPv4 addresses
-	ips, err := net.LookupIP(domain)
+	ipv4, err := net.LookupIP(domain)
 	if err != nil {
-		return nil, fmt.Errorf("failed to lookup IP: %v", err)
+		return nil, err
 	}
 
-	for _, ip := range ips {
+	// Separate IPv4 and IPv6 addresses
+	for _, ip := range ipv4 {
 		if ipv4 := ip.To4(); ipv4 != nil {
 			info.IPv4Addresses = append(info.IPv4Addresses, ipv4.String())
 		} else {
@@ -52,24 +54,26 @@ func GetDNSInfo(domain string) (*DNSInfo, error) {
 		}
 	}
 
-	// Get IP information for IPv4 addresses
+	// Get IP details for IPv4
 	for _, ip := range info.IPv4Addresses {
-		ipInfo, err := getIPInfo(ip, client)
-		if err != nil {
-			ipInfo = IPInfo{
-				IP:           ip,
-				Country:      "N/A",
-				City:         "N/A",
-				Organization: "Error fetching information",
-			}
+		details, err := getIPDetails(ip, client)
+		if err == nil {
+			info.IPv4Details = append(info.IPv4Details, details)
 		}
-		info.IPDetails = append(info.IPDetails, ipInfo)
+	}
+
+	// Get IP details for IPv6
+	for _, ip := range info.IPv6Addresses {
+		details, err := getIPDetails(ip, client)
+		if err == nil {
+			info.IPv6Details = append(info.IPv6Details, details)
+		}
 	}
 
 	return info, nil
 }
 
-func getIPInfo(ip string, client *http.Client) (IPInfo, error) {
+func getIPDetails(ip string, client *http.Client) (IPInfo, error) {
 	resp, err := client.Get(fmt.Sprintf("https://ipwho.is/%s", ip))
 	if err != nil {
 		return IPInfo{}, err

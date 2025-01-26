@@ -12,7 +12,8 @@ import (
 	"github.com/russmckendrick/ssl-toolkit/internal/web/templates"
 )
 
-type WebResult struct {
+type PageData struct {
+	Title       string
 	Domain      string
 	Certificate *certificate.CertificateInfo
 	Chain       []*certificate.CertificateInfo
@@ -21,8 +22,11 @@ type WebResult struct {
 }
 
 func HandleHome(w http.ResponseWriter, r *http.Request) {
+	data := PageData{
+		Title: "SSL Certificate Checker",
+	}
 	t := template.Must(template.New("home").Parse(templates.HomeTemplate))
-	t.Execute(w, nil)
+	t.Execute(w, data)
 }
 
 func HandleCheck(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +42,10 @@ func HandleCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := WebResult{Domain: domain}
+	result := PageData{
+		Title:  "SSL Certificate Check Results - " + domain,
+		Domain: domain,
+	}
 
 	// Get certificate info
 	certInfo, err := certificate.GetCertificateInfo(domain)
@@ -58,12 +65,10 @@ func HandleCheck(w http.ResponseWriter, r *http.Request) {
 		result.HPKP = hpkpInfo
 	}
 
-	// Only get DNS info if certificate is valid
-	if certInfo != nil && certInfo.IsValid() {
-		dnsInfo, err := dns.GetDNSInfo(domain)
-		if err == nil {
-			result.DNS = dnsInfo
-		}
+	// Get DNS info regardless of certificate status
+	dnsInfo, err := dns.GetDNSInfo(domain)
+	if err == nil {
+		result.DNS = dnsInfo
 	}
 
 	// Add template functions
