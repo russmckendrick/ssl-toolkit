@@ -5,6 +5,8 @@ import (
 	"html/template"
 	"net/http"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/russmckendrick/ssl-toolkit/internal/certificate"
@@ -33,7 +35,22 @@ func main() {
 		Args:  cobra.MinimumNArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			if webMode {
-				startWebServer(port)
+				if len(args) > 0 {
+					// If domain is provided, redirect to check page
+					domain, err := utils.CleanDomain(args[0])
+					if err == nil {
+						// Start server in background
+						go startWebServer(port)
+						// Open browser with domain
+						url := fmt.Sprintf("http://localhost:%s/check?domain=%s", port, domain)
+						fmt.Printf("Opening %s\n", url)
+						openBrowser(url)
+						// Keep server running
+						select {}
+					}
+				} else {
+					startWebServer(port)
+				}
 				return
 			}
 
@@ -104,7 +121,14 @@ func startWebServer(port string) {
 	http.HandleFunc("/", handleHome)
 	http.HandleFunc("/check", handleCheck)
 
-	fmt.Printf("Starting web server on http://localhost:%s\n", port)
+	// Get domain from command line if provided
+	if len(os.Args) > 2 {
+		domain := os.Args[2]
+		fmt.Printf("Starting web server on http://localhost:%s/check?domain=%s\n", port, domain)
+	} else {
+		fmt.Printf("Starting web server on http://localhost:%s\n", port)
+	}
+
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		fmt.Printf("Error starting server: %v\n", err)
 		os.Exit(1)
@@ -402,4 +426,24 @@ funcMap := template.FuncMap{
 
 t := template.Must(template.New("result").Funcs(funcMap).Parse(tmpl))
 t.Execute(w, result)
+}
+
+// openBrowser opens the specified URL in the default browser
+func openBrowser(url string) {
+	var err error
+
+	switch runtime.GOOS {
+	case "linux":
+		err = exec.Command("xdg-open", url).Start()
+	case "windows":
+		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	case "darwin":
+		err = exec.Command("open", url).Start()
+	default:
+		err = fmt.Errorf("unsupported platform")
+	}
+
+	if err != nil {
+		fmt.Printf("Error opening browser: %v\n", err)
+	}
 } 
