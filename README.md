@@ -1,6 +1,6 @@
 # SSL Certificate Checker 🔒
 
-A Python tool for checking SSL certificates, certificate chains, and DNS information for domains.
+A Go tool for checking SSL certificates, certificate chains, and DNS information for domains.
 
 ## Features
 
@@ -13,6 +13,10 @@ A Python tool for checking SSL certificates, certificate chains, and DNS informa
 - 🌐 DNS record lookup
 - 🗺️ IP geolocation information
 
+## Requirements
+
+- Go 1.21 or higher
+
 ## Installation
 
 1. Clone the repository:
@@ -21,40 +25,50 @@ git clone git@github.com:russmckendrick/ssl-toolkit.git
 cd ssl-toolkit
 ```
 
-2. Install the required dependencies:
+2. Install dependencies:
 ```bash
-pip install -r requirements.txt
+make deps
+```
+
+3. Build the application:
+```bash
+make build
 ```
 
 ## Usage
 
-You can run the script in two ways:
+You can run the application in several ways:
 
-1. With a domain argument:
+1. Using make:
 ```bash
-python ssl_checker.py example.com
+make run
 ```
 
-2. Interactive mode:
+2. Direct execution after building:
 ```bash
-python ssl_checker.py
+./build/ssl-checker example.com
 ```
 
-The script accepts various input formats and will automatically clean the domain:
+3. Or build and run in one step:
+```bash
+go run cmd/ssl-checker/main.go example.com
+```
+
+The tool accepts various input formats and will automatically clean the domain:
 
 ```bash
 # All these formats work:
-python ssl_checker.py www.example.com
-python ssl_checker.py https://www.example.com
-python ssl_checker.py http://www.example.com/path/to/page
-python ssl_checker.py www.example.com:443
-python ssl_checker.py https://www.example.com/blog/post?id=123
+./build/ssl-checker www.example.com
+./build/ssl-checker https://www.example.com
+./build/ssl-checker http://www.example.com/path/to/page
+./build/ssl-checker www.example.com:443
 ```
 
-The script will extract just the domain name from any URL format. For example:
-- `https://www.russ.cloud/2025/01/12/personal-project-updates-and-ai-editors/` → `www.russ.cloud`
-- `https://example.com:443/path?query=123` → `example.com`
-- `http://subdomain.example.com/` → `subdomain.example.com`
+## Development
+
+- Build the application: `make build`
+- Run tests: `make test`
+- Clean build artifacts: `make clean`
 
 ## Example Output
 

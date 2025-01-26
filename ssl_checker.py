@@ -11,8 +11,16 @@ from cryptography.x509.oid import NameOID
 import idna
 import sys
 from urllib.parse import urlparse
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.live import Live
+from rich import print as rprint
 
 warnings.filterwarnings('ignore', category=DeprecationWarning)
+
+console = Console()
 
 def create_unverified_context():
     """Create an SSL context that doesn't verify certificates."""
@@ -315,142 +323,156 @@ def main():
     if len(sys.argv) > 1:
         input_domain = sys.argv[1].strip()
     else:
-        input_domain = input("Enter domain name (e.g., example.com): ").strip()
+        input_domain = console.input("[bold blue]Enter domain name[/] (e.g., example.com): ").strip()
     
     try:
         domain = clean_domain(input_domain)
     except ValueError as e:
-        print(f"❌ Error: {str(e)}")
-        print("Please enter a valid domain name (e.g., example.com)")
+        console.print(f"[red]❌ Error:[/] {str(e)}")
+        console.print("[yellow]Please enter a valid domain name (e.g., example.com)[/]")
         return
     
-    print(f"\nChecking domain: {domain}")
-    print("\n=== 🔒 SSL Certificate Information ===")
-    cert_info = get_certificate_info(domain)
-    if 'error' not in cert_info:
-        print(f"🏢 Issuer: {cert_info['issuer'].get('commonName', 'N/A')}")
-        print(f"📅 Valid From: {cert_info['not_before']}")
-        print(f"📅 Valid Until: {cert_info['not_after']}")
+    console.print(f"\n[bold]Checking domain:[/] {domain}")
+    
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        transient=True,
+    ) as progress:
+        task1 = progress.add_task("⏳ Checking SSL certificate...", total=None)
+        cert_info = get_certificate_info(domain)
+        progress.update(task1, description="✓ SSL certificate checked")
         
-        # Add HPKP check before certificate validation
-        print("\n=== 📌 HPKP Information ===")
-        hpkp_info = check_hpkp(domain)
-        if 'error' not in hpkp_info:
-            if hpkp_info['has_hpkp']:
-                print("✅ HPKP is enabled")
-                print(f"⏱️  Max Age: {hpkp_info['max_age']} seconds")
-                if hpkp_info['include_subdomains']:
-                    print("🔄 Includes Subdomains")
-                if hpkp_info['report_uri']:
-                    print(f"📝 Report URI: {hpkp_info['report_uri']}")
-                print("\n🔐 Pin Values:")
-                for pin in hpkp_info['pins']:
-                    print(f"  • {pin}")
-            else:
-                print("❌ HPKP is not enabled")
-        else:
-            print(f"❌ Error checking HPKP: {hpkp_info['error']}")
-        
-        print("\n=== 🔒 Certificate Validation ===")
-        try:
-            valid_until = datetime.datetime.strptime(
-                cert_info['not_after'].replace(' UTC', ''), 
-                '%Y-%m-%d %H:%M:%S'
-            ).replace(tzinfo=datetime.UTC)
+        if 'error' not in cert_info:
+            # SSL Certificate Information Panel
+            console.print(Panel.fit(
+                "\n".join([
+                    f"[bold]🏢 Issuer:[/] {cert_info['issuer'].get('commonName', 'N/A')}",
+                    f"[bold]📅 Valid From:[/] {cert_info['not_before']}",
+                    f"[bold]📅 Valid Until:[/] {cert_info['not_after']}"
+                ]),
+                title="🔒 SSL Certificate Information",
+                border_style="blue"
+            ))
             
-            is_expired = valid_until <= datetime.datetime.now(datetime.UTC)
-            trust_status = cert_info.get('trust_status', 'unknown')
+            # HPKP Check
+            task2 = progress.add_task("⏳ Checking HPKP configuration...", total=None)
+            hpkp_info = check_hpkp(domain)
+            progress.update(task2, description="✓ HPKP configuration checked")
             
-            # First check expiration
-            if is_expired:
-                print("📛 Certificate Status: Expired")
-            else:
-                # Then check trust status
-                if trust_status == 'trusted':
-                    print("✅ Certificate Status: Valid and Trusted")
-                else:
-                    print("❌ Certificate Status: Invalid")
+            # HPKP Information Panel
+            if 'error' not in hpkp_info:
+                status = "[green]✅ HPKP is enabled[/]" if hpkp_info['has_hpkp'] else "[yellow]❌ HPKP is not enabled[/]"
+                console.print(Panel.fit(
+                    f"[bold]Status:[/] {status}",
+                    title="📌 HPKP Information",
+                    border_style="blue"
+                ))
             
-            # Show detailed trust status
-            if trust_status == 'revoked':
-                print("🚫 Trust Status: Certificate has been revoked")
-            elif trust_status == 'untrusted_root':
-                print("⚠️  Trust Status: Certificate chain contains untrusted root")
-            elif trust_status == 'expired':
-                print("📛 Trust Status: Certificate has expired")
-            elif trust_status == 'trusted':
-                print("✅ Trust Status: Certificate chain is trusted")
-                if 'crl_checked' in cert_info and not cert_info['crl_checked']:
-                    print("⚠️  Note: CRL verification unavailable")
-            else:
-                print("❌ Trust Status: Certificate validation failed")
-            
-            if not cert_info.get('verified', True):
-                print(f"\n⚠️  Warning: Certificate verification failed")
-                print(f"❌ Reason: {cert_info.get('verification_error', 'Unknown')}")
-            
-            # Exit early only if there are serious issues
-            if is_expired or trust_status in ['revoked', 'untrusted_root', 'invalid']:
-                print("\n❌ Certificate validation failed. Skipping additional checks.")
-                return
-            
-            # Only continue with chain and DNS if certificate is valid
-            print("\n=== 🔗 Certificate Chain ===")
-            chain = get_certificate_chain(domain)
-            for i, cert in enumerate(chain, 1):
-                if 'error' not in cert:
-                    print(f"\n📜 Certificate {i}:")
-                    print(f"📌 Version: {cert['version']}")
-                    print(f"🔑 Serial Number: {cert['serial_number']}")
-                    
-                    print("\n👤 Subject:")
-                    for key, value in cert['subject'].items():
-                        print(f"  {key}: {value}")
-                    
-                    print("\n📝 Issuer:")
-                    for key, value in cert['issuer'].items():
-                        print(f"  {key}: {value}")
-                    
-                    print(f"\n⏰ Validity Period:")
-                    print(f"  Not Before: {cert['not_before']}")
-                    print(f"  Not After: {cert['not_after']}")
-                    print(f"\n🔏 Signature Algorithm: {cert['signature_algorithm']}")
-                    
-                    if cert['subject_alt_names']:
-                        print("\n🔄 Subject Alternative Names:")
-                        for san in cert['subject_alt_names']:
-                            print(f"  {san}")
-                else:
-                    print(f"❌ Error getting chain: {cert['error']}")
-            
-            print("\n=== 🌐 DNS Information ===")
-            dns_info = get_dns_info(domain)
-            if 'error' not in dns_info:
-                print("\n📍 IPv4 Addresses:")
-                for ip in dns_info['a_records']:
-                    print(f"  • {ip}")
+            # Certificate Validation
+            task3 = progress.add_task("⏳ Checking certificate validation...", total=None)
+            try:
+                valid_until = datetime.datetime.strptime(
+                    cert_info['not_after'].replace(' UTC', ''), 
+                    '%Y-%m-%d %H:%M:%S'
+                ).replace(tzinfo=datetime.UTC)
                 
-                if dns_info['aaaa_records']:
-                    print("\n📍 IPv6 Addresses:")
-                    for ip in dns_info['aaaa_records']:
-                        print(f"  • {ip}")
+                is_expired = valid_until <= datetime.datetime.now(datetime.UTC)
+                trust_status = cert_info.get('trust_status', 'unknown')
                 
-                print("\n🌍 IP Information:")
-                for ip_data in dns_info['ip_info']:
-                    if 'error' not in ip_data:
-                        print(f"\n🔍 {ip_data['ip']}:")
-                        print(f"  🗺️  Country: {ip_data.get('country', 'N/A')}")
-                        print(f"  🏙️  City: {ip_data.get('city', 'N/A')}")
-                        print(f"  🏢 Organization: {ip_data.get('org', 'N/A')}")
+                # First check expiration
+                if is_expired:
+                    console.print("[red]📛 Certificate Status: Expired[/]")
+                else:
+                    # Then check trust status
+                    if trust_status == 'trusted':
+                        console.print("[green]✅ Certificate Status: Valid and Trusted[/]")
                     else:
-                        print(f"\n❌ {ip_data['ip']}: Error fetching information")
-            else:
-                print(f"❌ Error getting DNS information: {dns_info['error']}")
-                
-        except Exception as e:
-            print(f"⚠️  Certificate Status: Error parsing date - {str(e)}")
-    else:
-        print(f"❌ Error getting certificate: {cert_info['error']}")
+                        console.print("[red]❌ Certificate Status: Invalid[/]")
+                    
+                    # Show detailed trust status
+                    if trust_status == 'revoked':
+                        console.print("[red]🚫 Trust Status: Certificate has been revoked[/]")
+                    elif trust_status == 'untrusted_root':
+                        console.print("[yellow]⚠️  Trust Status: Certificate chain contains untrusted root[/]")
+                    elif trust_status == 'expired':
+                        console.print("[red]📛 Trust Status: Certificate has expired[/]")
+                    elif trust_status == 'trusted':
+                        console.print("[green]✅ Trust Status: Certificate chain is trusted[/]")
+                        if 'crl_checked' in cert_info and not cert_info['crl_checked']:
+                            console.print("[yellow]⚠️  Note: CRL verification unavailable[/]")
+                    else:
+                        console.print("[red]❌ Trust Status: Certificate validation failed[/]")
+                    
+                    if not cert_info.get('verified', True):
+                        console.print("[yellow]⚠️  Warning: Certificate verification failed[/]")
+                        console.print(f"[red]❌ Reason: {cert_info.get('verification_error', 'Unknown')}[/]")
+                    
+                    # Exit early only if there are serious issues
+                    if is_expired or trust_status in ['revoked', 'untrusted_root', 'invalid']:
+                        console.print("[red]❌ Certificate validation failed. Skipping additional checks.[/]")
+                        return
+                    
+                    # Only continue with chain and DNS if certificate is valid
+                    progress.add_task(description="Getting certificate chain...", total=None)
+                    console.print("[bold]=== 🔗 Certificate Chain ===[/]")
+                    chain = get_certificate_chain(domain)
+                    for i, cert in enumerate(chain, 1):
+                        if 'error' not in cert:
+                            console.print(f"[bold]Certificate {i}:[/]")
+                            console.print(f"[bold]📌 Version: {cert['version']}[/]")
+                            console.print(f"[bold]🔑 Serial Number: {cert['serial_number']}[/]")
+                            
+                            console.print("[bold]👤 Subject:[/]")
+                            for key, value in cert['subject'].items():
+                                console.print(f"  {key}: {value}")
+                            
+                            console.print("[bold]📝 Issuer:[/]")
+                            for key, value in cert['issuer'].items():
+                                console.print(f"  {key}: {value}")
+                            
+                            console.print(f"[bold]⏰ Validity Period:[/]")
+                            console.print(f"  Not Before: {cert['not_before']}")
+                            console.print(f"  Not After: {cert['not_after']}")
+                            console.print(f"[bold]🔏 Signature Algorithm:[/] {cert['signature_algorithm']}")
+                            
+                            if cert['subject_alt_names']:
+                                console.print("[bold]🔄 Subject Alternative Names:[/]")
+                                for san in cert['subject_alt_names']:
+                                    console.print(f"  {san}")
+                        else:
+                            console.print(f"[red]❌ Error getting chain: {cert['error']}[/]")
+                    
+                    # DNS Information
+                    progress.add_task(description="Getting DNS information...", total=None)
+                    console.print("[bold]=== 🌐 DNS Information ===[/]")
+                    dns_info = get_dns_info(domain)
+                    if 'error' not in dns_info:
+                        console.print("[bold]📍 IPv4 Addresses:[/]")
+                        for ip in dns_info['a_records']:
+                            console.print(f"  • {ip}")
+                        
+                        if dns_info['aaaa_records']:
+                            console.print("[bold]📍 IPv6 Addresses:[/]")
+                            for ip in dns_info['aaaa_records']:
+                                console.print(f"  • {ip}")
+                        
+                        console.print("[bold]🌍 IP Information:[/]")
+                        for ip_data in dns_info['ip_info']:
+                            if 'error' not in ip_data:
+                                console.print(f"[bold]🔍 {ip_data['ip']}:[/]")
+                                console.print(f"  🗺️  Country: {ip_data.get('country', 'N/A')}")
+                                console.print(f"  🏙️  City: {ip_data.get('city', 'N/A')}")
+                                console.print(f"  🏢 Organization: {ip_data.get('org', 'N/A')}")
+                            else:
+                                console.print(f"[red]❌ {ip_data['ip']}: Error fetching information[/]")
+                    else:
+                        console.print(f"[red]❌ Error getting DNS information: {dns_info['error']}[/]")
+                    
+            except Exception as e:
+                console.print("[yellow]⚠️  Certificate Status: Error parsing date - {str(e)}[/]")
+        else:
+            console.print(f"[red]❌ Error getting certificate: {cert_info['error']}[/]")
 
 if __name__ == "__main__":
     main()
