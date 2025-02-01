@@ -20,8 +20,8 @@ func main() {
 	var port string
 
 	var rootCmd = &cobra.Command{
-		Use:   "ssl-checker [domain]",
-		Short: "SSL Certificate Checker",
+		Use:   "ssl-toolkit [domain]",
+		Short: "SSL Certificate Tool Kit",
 		Long:  `A tool for checking SSL certificates, certificate chains, and DNS information for domains.`,
 		Args:  cobra.MinimumNArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {

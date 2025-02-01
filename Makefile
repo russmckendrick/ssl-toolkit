@@ -1,14 +1,14 @@
 .PHONY: build run clean test
 
 # Binary name
-BINARY_NAME=ssl-checker
+BINARY_NAME=ssl-toolkit
 BUILD_DIR=build
 
 # Build the application
 build:
 	@echo "Building..."
 	@mkdir -p $(BUILD_DIR)
-	@go build -o $(BUILD_DIR)/$(BINARY_NAME) cmd/ssl-checker/main.go
+	@go build -o $(BUILD_DIR)/$(BINARY_NAME) cmd/ssl-toolkit/main.go
 
 # Run the application
 run: build

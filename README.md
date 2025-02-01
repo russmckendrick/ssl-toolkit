@@ -1,4 +1,4 @@
-# SSL Certificate Checker 🔒
+# SSL Certificate Toolkit 🔒
 
 A Go tool for checking SSL certificates, certificate chains, and DNS information for domains.
 
@@ -46,22 +46,22 @@ make run
 
 2. Direct execution after building:
 ```bash
-./build/ssl-checker example.com
+./build/ssl-toolkit example.com
 ```
 
 3. Or build and run in one step:
 ```bash
-go run cmd/ssl-checker/main.go example.com
+go run cmd/ssl-toolkit/main.go example.com
 ```
 
 The tool accepts various input formats and will automatically clean the domain:
 
 ```bash
 # All these formats work:
-./build/ssl-checker www.example.com
-./build/ssl-checker https://www.example.com
-./build/ssl-checker http://www.example.com/path/to/page
-./build/ssl-checker www.example.com:443
+./build/ssl-toolkit www.example.com
+./build/ssl-toolkit https://www.example.com
+./build/ssl-toolkit http://www.example.com/path/to/page
+./build/ssl-toolkit www.example.com:443
 ```
 
 ## Example Output
