@@ -2,17 +2,30 @@ name: Update Homebrew Tap
 
 on:
   release:
-    types: [published]
+    types: [released, published]
+  workflow_dispatch:  # Allows manual triggering
 
 jobs:
   update-tap:
     runs-on: ubuntu-latest
     steps:
+      - name: Debug Event Info
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "Event type: ${{ github.event.action }}"
+          echo "Release tag: ${{ github.event.release.tag_name }}"
+          echo "Ref: ${GITHUB_REF}"
+
       - name: Download checksums
         run: |
           mkdir -p build
-          VERSION=${{ github.event.release.tag_name }}
-          echo "Downloading checksums for version: ${VERSION}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Get latest release for manual runs
+            VERSION=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name)
+          else
+            VERSION=${{ github.event.release.tag_name }}
+          fi
+          echo "Using version: ${VERSION}"
           curl -L -o build/ssl-toolkit-darwin-amd64.sha256 https://github.com/${{ github.repository }}/releases/download/${VERSION}/ssl-toolkit-darwin-amd64.sha256
           curl -L -o build/ssl-toolkit-darwin-arm64.sha256 https://github.com/${{ github.repository }}/releases/download/${VERSION}/ssl-toolkit-darwin-arm64.sha256
 
@@ -25,7 +38,12 @@ jobs:
 
       - name: Update Formula
         run: |
-          VERSION=${{ github.event.release.tag_name }}
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Get latest release for manual runs
+            VERSION=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name)
+          else
+            VERSION=${{ github.event.release.tag_name }}
+          fi
           echo "Updating formula for version: ${VERSION}"
           AMD64_SHA=$(cat build/ssl-toolkit-darwin-amd64.sha256 | cut -d' ' -f1)
           ARM64_SHA=$(cat build/ssl-toolkit-darwin-arm64.sha256 | cut -d' ' -f1)
