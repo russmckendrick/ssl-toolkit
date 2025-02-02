@@ -1,5 +1,12 @@
 package templates
 
+const DNSLoadingSection = `
+<div id="dns-section" class="bg-white rounded-lg shadow-md p-6">
+    <h2 class="text-2xl font-bold mb-4">🌐 DNS Information</h2>
+    ` + LoadingSpinner + `
+</div>
+`
+
 const DNSSection = `
 {{if .DNS}}
 <div class="bg-white rounded-lg shadow-md p-6">

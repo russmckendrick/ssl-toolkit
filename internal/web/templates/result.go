@@ -32,6 +32,20 @@ const ResultTemplate = BaseHeader + `
         </div>
         {{end}}
         
-        ` + CertificateSection + ChainVisualization + ChainSection + HPKPSection + DNSSection + `
+        ` + CertificateSection + ChainVisualization + ChainSection + HPKPSection + DNSLoadingSection + `
+
+        <script>
+        // Load DNS information after page load
+        window.addEventListener('load', function() {
+            fetch('/dns-check?domain={{.Domain}}')
+                .then(response => response.text())
+                .then(html => {
+                    document.getElementById('dns-section').outerHTML = html;
+                })
+                .catch(error => {
+                    document.getElementById('dns-section').innerHTML = '<div class="p-4 bg-red-100 text-red-700 rounded-lg">Failed to load DNS information: ' + error.message + '</div>';
+                });
+        });
+        </script>
     {{end}}
 ` + BaseFooter 

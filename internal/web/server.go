@@ -25,9 +25,10 @@ func (s *Server) SetupRoutes() {
 	// Add routes
 	s.Router.HandleFunc("/", handlers.HandleHome)
 	s.Router.HandleFunc("/check", handlers.HandleCheck)
+	s.Router.HandleFunc("/dns-check", handlers.HandleDNSCheck)
 	s.Router.HandleFunc("/download-chain", handlers.HandleDownloadChain)
 	s.Router.HandleFunc("/calendar-reminder", handlers.HandleCalendarReminder)
-	fmt.Printf("Routes registered: /, /check, /download-chain, /calendar-reminder\n")
+	fmt.Printf("Routes registered: /, /check, /dns-check, /download-chain, /calendar-reminder\n")
 }
 
 // Start starts the web server

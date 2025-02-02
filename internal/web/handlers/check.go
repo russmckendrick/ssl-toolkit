@@ -64,14 +64,12 @@ func HandleCheck(w http.ResponseWriter, r *http.Request) {
 		ShowRetryWithoutIP: showRetryWithoutIP,
 	}
 
-	// Only fetch additional info if we have a valid certificate
+	// Only fetch certificate and HPKP info if we have a valid certificate
 	if certInfo != nil && err == nil {
 		// Get certificate chain
 		data.Chain, _ = certificate.GetCertificateChain(domain)
 		// Get HPKP information
 		data.HPKP, _ = hpkp.CheckHPKP(domain)
-		// Get DNS information
-		data.DNS, _ = dns.GetDNSInfo(domain)
 	}
 
 	// Create template functions map
@@ -109,6 +107,47 @@ func HandleCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := tmpl.Execute(w, data); err != nil {
 		fmt.Printf("Template execution error: %v\n", err)
+		return
+	}
+}
+
+// Add new handler for DNS check
+func HandleDNSCheck(w http.ResponseWriter, r *http.Request) {
+	domain := r.URL.Query().Get("domain")
+	if domain == "" {
+		http.Error(w, "Domain is required", http.StatusBadRequest)
+		return
+	}
+
+	domain, err := utils.CleanDomain(domain)
+	if err != nil {
+		http.Error(w, "Invalid domain", http.StatusBadRequest)
+		return
+	}
+
+	dnsInfo, err := dns.GetDNSInfo(domain)
+	if err != nil {
+		http.Error(w, "Failed to get DNS info", http.StatusInternalServerError)
+		return
+	}
+
+	// Create template with the same functions as the main template
+	funcMap := template.FuncMap{
+		"add": func(a, b int) int { return a + b },
+		"sub": func(a, b int) int { return a - b },
+		// ... add other necessary functions ...
+	}
+
+	tmpl := template.Must(template.New("dns").Funcs(funcMap).Parse(templates.DNSSection))
+	
+	data := struct {
+		DNS *dns.DNSInfo
+	}{
+		DNS: dnsInfo,
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		http.Error(w, "Template execution failed", http.StatusInternalServerError)
 		return
 	}
 } 
