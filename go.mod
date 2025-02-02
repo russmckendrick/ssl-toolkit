@@ -5,6 +5,7 @@ go 1.21
 require (
 	github.com/fatih/color v1.16.0
 	github.com/gwatts/rootcerts v0.0.0-20250101202213-6b948e2b3fef
+	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/spf13/cobra v1.8.0
 	golang.org/x/net v0.34.0
 )

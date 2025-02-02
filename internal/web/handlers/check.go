@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"fmt"
 	"html/template"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/russmckendrick/ssl-toolkit/internal/certificate"
 	"github.com/russmckendrick/ssl-toolkit/internal/dns"
@@ -21,14 +23,14 @@ func HandleCheck(w http.ResponseWriter, r *http.Request) {
 
 	domain, err := utils.CleanDomain(domain)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid domain: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Get certificate information
 	certInfo, err := certificate.GetCertificateInfo(domain)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Error getting certificate: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -68,15 +70,16 @@ func HandleCheck(w http.ResponseWriter, r *http.Request) {
 				return false
 			}
 			lastCert := chain[len(chain)-1]
-			// Check if the last certificate is self-signed (subject == issuer)
 			return lastCert.Subject.CommonName == lastCert.Issuer.CommonName
 		},
 		"isSelfSigned": func(cert *certificate.CertificateInfo) bool {
 			if cert == nil {
 				return false
 			}
-			// A certificate is self-signed if its subject equals its issuer
 			return cert.Subject.CommonName == cert.Issuer.CommonName
+		},
+		"daysUntil": func(t time.Time) int {
+			return int(time.Until(t).Hours() / 24)
 		},
 		"lastCert": func(chain []*certificate.CertificateInfo) *certificate.CertificateInfo {
 			if len(chain) == 0 {
@@ -89,8 +92,10 @@ func HandleCheck(w http.ResponseWriter, r *http.Request) {
 	// Parse template with functions
 	tmpl := template.Must(template.New("result").Funcs(funcMap).Parse(templates.ResultTemplate))
 
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := tmpl.Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		// Log the error but don't try to write a new response
+		fmt.Printf("Template execution error: %v\n", err)
 		return
 	}
 } 

@@ -4,42 +4,78 @@ const CertificateSection = `
 {{if .Certificate}}
 <div class="bg-white rounded-lg shadow-md p-6 mb-6">
     <h2 class="text-2xl font-bold mb-4">🔒 SSL Certificate Information</h2>
-    <div class="grid grid-cols-2 gap-4">
-        <div>
-            <p class="font-semibold">Issuer:</p>
-            <p>{{.Certificate.Issuer.CommonName}}</p>
+    <div class="grid grid-cols-3 gap-4">
+        <div class="col-span-2">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <p class="font-semibold">Issuer:</p>
+                    <p>{{.Certificate.Issuer.CommonName}}</p>
+                </div>
+                <div>
+                    <p class="font-semibold">Valid From:</p>
+                    <p>{{.Certificate.NotBefore.Format "2006-01-02 15:04:05 UTC"}}</p>
+                </div>
+                <div>
+                    <p class="font-semibold">Valid Until:</p>
+                    <p>{{.Certificate.NotAfter.Format "2006-01-02 15:04:05 UTC"}}</p>
+                </div>
+                <div>
+                    <p class="font-semibold">Status:</p>
+                    <p>{{if .Certificate.IsValid}}
+                        <span class="text-green-600">✅ Valid and Trusted</span>
+                    {{else}}
+                        <span class="text-red-600">❌ Invalid</span>
+                    {{end}}</p>
+                </div>
+                <div>
+                    <p class="font-semibold">Trust Status:</p>
+                    <p>{{if eq .Certificate.TrustStatus "trusted"}}
+                        <span class="text-green-600">✅ Certificate chain is trusted</span>
+                    {{else if eq .Certificate.TrustStatus "revoked"}}
+                        <span class="text-red-600">🚫 Certificate has been revoked</span>
+                    {{else if eq .Certificate.TrustStatus "untrusted_root"}}
+                        <span class="text-yellow-600">⚠️ Chain contains untrusted root</span>
+                    {{else if eq .Certificate.TrustStatus "expired"}}
+                        <span class="text-red-600">📛 Certificate has expired</span>
+                    {{else if eq .Certificate.TrustStatus "valid"}}
+                        <span class="text-yellow-600">⚠️ Certificate appears valid but chain verification incomplete</span>
+                    {{else}}
+                        <span class="text-red-600">❌ Certificate validation failed</span>
+                    {{end}}</p>
+                </div>
+            </div>
         </div>
-        <div>
-            <p class="font-semibold">Valid From:</p>
-            <p>{{.Certificate.NotBefore.Format "2006-01-02 15:04:05 UTC"}}</p>
-        </div>
-        <div>
-            <p class="font-semibold">Valid Until:</p>
-            <p>{{.Certificate.NotAfter.Format "2006-01-02 15:04:05 UTC"}}</p>
-        </div>
-        <div>
-            <p class="font-semibold">Status:</p>
-            <p>{{if .Certificate.IsValid}}
-                <span class="text-green-600">✅ Valid and Trusted</span>
-            {{else}}
-                <span class="text-red-600">❌ Invalid</span>
-            {{end}}</p>
-        </div>
-        <div>
-            <p class="font-semibold">Trust Status:</p>
-            <p>{{if eq .Certificate.TrustStatus "trusted"}}
-                <span class="text-green-600">✅ Certificate chain is trusted</span>
-            {{else if eq .Certificate.TrustStatus "revoked"}}
-                <span class="text-red-600">🚫 Certificate has been revoked</span>
-            {{else if eq .Certificate.TrustStatus "untrusted_root"}}
-                <span class="text-yellow-600">⚠️ Chain contains untrusted root</span>
-            {{else if eq .Certificate.TrustStatus "expired"}}
-                <span class="text-red-600">📛 Certificate has expired</span>
-            {{else if eq .Certificate.TrustStatus "valid"}}
-                <span class="text-yellow-600">⚠️ Certificate appears valid but chain verification incomplete</span>
-            {{else}}
-                <span class="text-red-600">❌ Certificate validation failed</span>
-            {{end}}</p>
+        <div class="flex justify-center">
+            <div class="w-48 rounded-lg overflow-hidden shadow-sm border border-gray-200">
+                <div class="bg-blue-600 text-white text-center py-2 font-semibold">
+                    {{.Certificate.NotAfter.Format "January 2006"}}
+                </div>
+                <div class="bg-white p-4 text-center">
+                    <div class="text-4xl font-bold text-gray-700 mb-1">
+                        {{.Certificate.NotAfter.Format "2"}}
+                    </div>
+                    <div class="text-sm text-gray-500">
+                        {{.Certificate.NotAfter.Format "Monday"}}
+                    </div>
+                    <div class="mt-3 pt-3 border-t border-gray-200">
+                        {{$daysLeft := daysUntil .Certificate.NotAfter}}
+                        <div class="text-sm font-semibold 
+                            {{if lt $daysLeft 30}}text-red-600
+                            {{else if lt $daysLeft 90}}text-yellow-600
+                            {{else}}text-green-600{{end}}">
+                            {{$daysLeft}} days left
+                        </div>
+                        <div class="mt-2">
+                            <a href="/calendar-reminder?domain={{$.Domain}}" 
+                               class="inline-flex items-center px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 
+                                      text-white font-medium rounded shadow-sm transition-colors duration-200">
+                                <span class="mr-1">📅</span>
+                                Add Reminder
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>

@@ -7,10 +7,12 @@ import (
 	"os/exec"
 	"runtime"
 
+	"github.com/pkg/browser"
 	"github.com/russmckendrick/ssl-toolkit/internal/certificate"
 	"github.com/russmckendrick/ssl-toolkit/internal/dns"
 	"github.com/russmckendrick/ssl-toolkit/internal/hpkp"
 	"github.com/russmckendrick/ssl-toolkit/internal/utils"
+	"github.com/russmckendrick/ssl-toolkit/internal/web"
 	"github.com/russmckendrick/ssl-toolkit/internal/web/handlers"
 	"github.com/spf13/cobra"
 )
@@ -52,13 +54,16 @@ func main() {
 					domain, err := utils.CleanDomain(args[0])
 					if err == nil {
 						// Start server in background
-						go startWebServer(port)
-						// Open browser with domain
-						url := fmt.Sprintf("http://localhost:%s/check?domain=%s", port, domain)
-						fmt.Printf("Opening %s\n", url)
-						openBrowser(url)
-						// Keep server running
-						select {}
+						fmt.Printf("Starting web server...\n")
+						server := web.NewServer()
+						server.SetupRoutes()
+						fmt.Printf("Server configured, starting on %s\n", "http://localhost:8080")
+						go func() {
+							browser.OpenURL(fmt.Sprintf("http://localhost:8080/check?domain=%s", domain))
+						}()
+						if err := server.Start(":8080"); err != nil {
+							fmt.Printf("Server error: %v\n", err)
+						}
 					}
 				} else {
 					startWebServer(port)
