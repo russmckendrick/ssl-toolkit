@@ -190,7 +190,7 @@ func main() {
 				}
 
 				// Get and display DNS information
-				dnsInfo, err := dns.GetDNSInfo(domain)
+				dnsInfo, err := dns.GetDNSInfoWithLoading(domain)
 				if err != nil {
 					fmt.Printf("❌ Error getting DNS information: %v\n", err)
 				} else {

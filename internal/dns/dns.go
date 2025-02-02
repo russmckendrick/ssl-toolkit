@@ -41,21 +41,29 @@ type DNSRecords struct {
 	PTR   []string
 }
 
+type RecordDifference struct {
+	RecordType string
+	Expected   []string
+	Actual     []string
+}
+
 type NameserverCheck struct {
 	Nameserver     string
 	IPv4Addresses  []string
 	IPv6Addresses  []string
 	IsConsistent   bool
 	Records        DNSRecords
+	Differences    []RecordDifference
 }
 
 type DNSInfo struct {
-	IPv4Addresses []string
-	IPv6Addresses []string
-	IPv4Details   []IPInfo
-	IPv6Details   []IPInfo
+	IPv4Addresses    []string
+	IPv6Addresses    []string
+	IPv4Details      []IPInfo
+	IPv6Details      []IPInfo
 	NameserverChecks []NameserverCheck
 	IsConsistent     bool
+	CheckedDomain    string
 }
 
 func extractBaseDomain(domain string) string {
@@ -86,13 +94,7 @@ func GetDNSRecords(domain string, resolver *net.Resolver) (DNSRecords, error) {
 	ctx := context.Background()
 	records := DNSRecords{}
 
-	// Try AXFR transfer first
-	axfrRecords := tryZoneTransfer(domain)
-	if len(axfrRecords.A) > 0 {
-		return axfrRecords, nil
-	}
-
-	// Get A records
+	// Get A records for the specific domain only
 	if ips, err := resolver.LookupIPAddr(ctx, domain); err == nil {
 		for _, ip := range ips {
 			if ipv4 := ip.IP.To4(); ipv4 != nil {
@@ -100,6 +102,85 @@ func GetDNSRecords(domain string, resolver *net.Resolver) (DNSRecords, error) {
 			} else {
 				records.AAAA = append(records.AAAA, fmt.Sprintf("%s: %s", domain, ip.IP.String()))
 			}
+		}
+	}
+
+	// Get CNAME records for the specific domain
+	if cname, err := resolver.LookupCNAME(ctx, domain); err == nil {
+		records.CNAME = append(records.CNAME, fmt.Sprintf("%s → %s", domain, cname))
+	}
+
+	return records, nil
+}
+
+// Add a new function for full DNS enumeration
+func GetFullDNSRecords(domain string, resolver *net.Resolver) (DNSRecords, error) {
+	ctx := context.Background()
+	records := DNSRecords{}
+
+	// Try AXFR transfer first
+	axfrRecords := tryZoneTransfer(domain)
+	if len(axfrRecords.A) > 0 {
+		return axfrRecords, nil
+	}
+
+	// If AXFR fails, fall back to individual queries
+	// Common subdomains to check
+	subdomains := []string{
+		"",           // apex
+		"www",
+		"mail",
+		"smtp",
+		"pop",
+		"imap",
+		"webmail",
+		"remote",
+		"vpn",
+		"ftp",
+		"files",
+		"cloud",
+		"cdn",
+		"api",
+		"dev",
+		"staging",
+		"test",
+		"admin",
+		"portal",
+		"intranet",
+		"extranet",
+		"blog",
+		"shop",
+		"store",
+		"m",          // mobile
+		"app",
+		"gateway",
+		"secure",
+		"autodiscover", // Exchange/O365
+		"_domainkey",   // DKIM
+		"_dmarc",       // DMARC
+	}
+
+	// Query each subdomain
+	for _, sub := range subdomains {
+		target := domain
+		if sub != "" {
+			target = sub + "." + domain
+		}
+
+		// A records
+		if ips, err := resolver.LookupIPAddr(ctx, target); err == nil {
+			for _, ip := range ips {
+				if ipv4 := ip.IP.To4(); ipv4 != nil {
+					records.A = append(records.A, fmt.Sprintf("%s: %s", target, ipv4.String()))
+				} else {
+					records.AAAA = append(records.AAAA, fmt.Sprintf("%s: %s", target, ip.IP.String()))
+				}
+			}
+		}
+
+		// CNAME records
+		if cname, err := resolver.LookupCNAME(ctx, target); err == nil {
+			records.CNAME = append(records.CNAME, fmt.Sprintf("%s → %s", target, cname))
 		}
 	}
 
@@ -115,11 +196,6 @@ func GetDNSRecords(domain string, resolver *net.Resolver) (DNSRecords, error) {
 		records.TXT = txts
 	}
 
-	// Get CNAME records
-	if cname, err := resolver.LookupCNAME(ctx, domain); err == nil {
-		records.CNAME = append(records.CNAME, fmt.Sprintf("%s → %s", domain, cname))
-	}
-
 	// Get NS records
 	if nss, err := resolver.LookupNS(ctx, domain); err == nil {
 		for _, ns := range nss {
@@ -127,7 +203,7 @@ func GetDNSRecords(domain string, resolver *net.Resolver) (DNSRecords, error) {
 		}
 	}
 
-	// Get CAA records
+	// Get CAA records (using miekg/dns for CAA since net package doesn't support it)
 	records.CAA = lookupCAA(domain)
 
 	// Get SRV records for common services
@@ -136,8 +212,8 @@ func GetDNSRecords(domain string, resolver *net.Resolver) (DNSRecords, error) {
 		if _, addrs, err := resolver.LookupSRV(ctx, "", service, domain); err == nil {
 			for _, srv := range addrs {
 				records.SRV = append(records.SRV, 
-					fmt.Sprintf("%s.%s:%d (priority: %d, weight: %d)", 
-						service, domain, srv.Port, srv.Priority, srv.Weight))
+					fmt.Sprintf("%s:%d (priority: %d, weight: %d)", 
+						srv.Target, srv.Port, srv.Priority, srv.Weight))
 			}
 		}
 	}
@@ -221,18 +297,31 @@ func lookupCAA(domain string) []string {
 	return records
 }
 
+// Add this function to get the system DNS server
+func getSystemDNSServer() string {
+	// Try to get the system resolver
+	config, err := dns.ClientConfigFromFile("/etc/resolv.conf")
+	if err == nil && len(config.Servers) > 0 {
+		return config.Servers[0]
+	}
+	// Fallback to a well-known DNS server if we can't get the system DNS
+	return "8.8.8.8"
+}
+
 func GetDNSInfo(domain string) (*DNSInfo, error) {
 	// Extract base domain for nameserver lookups
 	baseDomain := extractBaseDomain(domain)
 	
-	info := &DNSInfo{}
+	info := &DNSInfo{
+		CheckedDomain: domain,
+	}
 	
-	// Setup HTTP client with timeout
+	// Setup HTTP client for IP details
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 
-	// First get IP addresses for the FQDN
+	// Get IP addresses for the FQDN
 	ipv4, err := net.LookupIP(domain)
 	if err != nil {
 		return nil, err
@@ -247,15 +336,13 @@ func GetDNSInfo(domain string) (*DNSInfo, error) {
 		}
 	}
 
-	// Get IP details for IPv4
+	// Get IP details
 	for _, ip := range info.IPv4Addresses {
 		details, err := getIPDetails(ip, client)
 		if err == nil {
 			info.IPv4Details = append(info.IPv4Details, details)
 		}
 	}
-
-	// Get IP details for IPv6
 	for _, ip := range info.IPv6Addresses {
 		details, err := getIPDetails(ip, client)
 		if err == nil {
@@ -263,67 +350,91 @@ func GetDNSInfo(domain string) (*DNSInfo, error) {
 		}
 	}
 
-	// Get nameservers using base domain
+	// Get nameservers for the domain
 	nameservers, err := net.LookupNS(baseDomain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to lookup nameservers: %w", err)
 	}
 
-	// Create default resolver for canonical records
-	defaultResolver := net.DefaultResolver
-	canonicalRecords, err := GetDNSRecords(domain, defaultResolver)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get canonical records: %w", err)
-	}
-
-	// Check each nameserver
-	info.IsConsistent = true
-	for _, ns := range nameservers {
-		check := NameserverCheck{
-			Nameserver: ns.Host,
-		}
-
-		// Create custom resolver for this nameserver
+	// Get records from first nameserver to use as canonical
+	if len(nameservers) > 0 {
+		firstNS := nameservers[0]
 		r := &net.Resolver{
 			PreferGo: true,
 			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-				d := net.Dialer{
-					Timeout: time.Second * 10,
-				}
-				return d.DialContext(ctx, "udp", ns.Host+":53")
+				d := net.Dialer{Timeout: time.Second * 10}
+				return d.DialContext(ctx, "udp", firstNS.Host+":53")
 			},
 		}
-
-		// Get all DNS records using the original domain
-		nsRecords, err := GetDNSRecords(domain, r)
+		
+		canonicalRecords, err := GetDNSRecords(domain, r)
 		if err != nil {
-			check.IsConsistent = false
-			info.IsConsistent = false
-			continue
-		}
-		check.Records = nsRecords
-
-		// Check consistency by comparing with canonical records
-		check.IsConsistent = compareRecords(canonicalRecords, nsRecords)
-		if !check.IsConsistent {
-			info.IsConsistent = false
+			return nil, fmt.Errorf("failed to get canonical records: %w", err)
 		}
 
-		info.NameserverChecks = append(info.NameserverChecks, check)
+		// Check each nameserver against the canonical records
+		info.IsConsistent = true
+		for _, ns := range nameservers {
+			check := NameserverCheck{
+				Nameserver: ns.Host,
+			}
+
+			r := &net.Resolver{
+				PreferGo: true,
+				Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+					d := net.Dialer{Timeout: time.Second * 10}
+					return d.DialContext(ctx, "udp", ns.Host+":53")
+				},
+			}
+
+			nsRecords, err := GetDNSRecords(domain, r)
+			if err != nil {
+				check.IsConsistent = false
+				info.IsConsistent = false
+				continue
+			}
+
+			// Compare with canonical records
+			check.IsConsistent, check.Differences = compareRecords(canonicalRecords, nsRecords)
+			if !check.IsConsistent {
+				info.IsConsistent = false
+			}
+
+			// Get full records for display
+			check.Records, _ = GetFullDNSRecords(baseDomain, r)
+			info.NameserverChecks = append(info.NameserverChecks, check)
+		}
 	}
 
 	return info, nil
 }
 
-func compareRecords(a, b DNSRecords) bool {
-	return compareStringLists(a.A, b.A) &&
-		compareStringLists(a.AAAA, b.AAAA) &&
-		compareStringLists(a.MX, b.MX) &&
-		compareStringLists(a.TXT, b.TXT) &&
-		compareStringLists(a.CNAME, b.CNAME) &&
-		compareStringLists(a.NS, b.NS) &&
-		compareStringLists(a.CAA, b.CAA) &&
-		compareStringLists(a.SRV, b.SRV)
+func compareRecords(canonical, ns DNSRecords) (bool, []RecordDifference) {
+	var differences []RecordDifference
+	isConsistent := true
+
+	// Helper function to check record type
+	checkRecordType := func(name string, canonical, ns []string) {
+		if !compareStringLists(canonical, ns) {
+			isConsistent = false
+			differences = append(differences, RecordDifference{
+				RecordType: name,
+				Expected:   canonical,
+				Actual:     ns,
+			})
+		}
+	}
+
+	checkRecordType("A", canonical.A, ns.A)
+	checkRecordType("AAAA", canonical.AAAA, ns.AAAA)
+	checkRecordType("MX", canonical.MX, ns.MX)
+	checkRecordType("TXT", canonical.TXT, ns.TXT)
+	checkRecordType("CNAME", canonical.CNAME, ns.CNAME)
+	checkRecordType("NS", canonical.NS, ns.NS)
+	checkRecordType("CAA", canonical.CAA, ns.CAA)
+	checkRecordType("SRV", canonical.SRV, ns.SRV)
+
+	return isConsistent, differences
 }
 
 func compareStringLists(a, b []string) bool {

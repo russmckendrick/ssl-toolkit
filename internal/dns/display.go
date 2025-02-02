@@ -2,8 +2,26 @@ package dns
 
 import (
 	"fmt"
+	"time"
 	"github.com/fatih/color"
 )
+
+// Add this new function for the loading animation
+func displayLoadingIndicator(done chan bool) {
+	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	i := 0
+	for {
+		select {
+		case <-done:
+			fmt.Printf("\r") // Clear the loading indicator
+			return
+		default:
+			fmt.Printf("\r%s Checking DNS records...", frames[i])
+			i = (i + 1) % len(frames)
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
 
 func displayRecords(records DNSRecords) {
 	if len(records.A) > 0 {
@@ -106,9 +124,9 @@ func DisplayDNSInfo(info *DNSInfo) {
 	// Display nameserver consistency check
 	bold.Println("\n🔍 Nameserver Consistency Check:")
 	if info.IsConsistent {
-		green.Println("  ✅ All nameservers are consistent")
+		green.Printf("  ✅ All nameservers are returning consistent records for %s\n", info.CheckedDomain)
 	} else {
-		red.Println("  ⚠️  Inconsistencies detected between nameservers")
+		red.Printf("  ⚠️  Inconsistencies detected between nameservers for %s\n", info.CheckedDomain)
 	}
 
 	// Display nameserver status
@@ -117,7 +135,18 @@ func DisplayDNSInfo(info *DNSInfo) {
 		if ns.IsConsistent {
 			green.Println("  ✓ Records match canonical records")
 		} else {
-			red.Println("  ✗ Records differ from canonical records")
+			red.Println("  ✗ Records differ from canonical records:")
+			for _, diff := range ns.Differences {
+				fmt.Printf("\n    %s Records:\n", diff.RecordType)
+				fmt.Println("      Expected:")
+				for _, r := range diff.Expected {
+					fmt.Printf("        - %s\n", r)
+				}
+				fmt.Println("      Actual:")
+				for _, r := range diff.Actual {
+					fmt.Printf("        - %s\n", r)
+				}
+			}
 		}
 	}
 
@@ -127,4 +156,22 @@ func DisplayDNSInfo(info *DNSInfo) {
 		fmt.Printf("  (from nameserver: %s)\n", info.NameserverChecks[0].Nameserver)
 		displayRecords(info.NameserverChecks[0].Records)
 	}
+}
+
+// Add this new function to wrap the DNS info retrieval with loading indicator
+func GetDNSInfoWithLoading(domain string) (*DNSInfo, error) {
+	done := make(chan bool)
+	go displayLoadingIndicator(done)
+
+	// Add a small initial delay to ensure the loading indicator is visible
+	time.Sleep(100 * time.Millisecond)
+
+	info, err := GetDNSInfo(domain)
+	done <- true
+	
+	// Add a small delay before clearing to ensure the last frame is visible
+	time.Sleep(100 * time.Millisecond)
+	fmt.Print("\r") // Clear the line
+
+	return info, err
 } 
