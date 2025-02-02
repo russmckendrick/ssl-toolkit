@@ -49,36 +49,12 @@ const ChainVisualization = `
 <div class="bg-white rounded-lg shadow-md p-6 mb-6">
     <div class="flex justify-between items-center mb-4">
         <h2 class="text-2xl font-bold">🔗 Certificate Chain Structure</h2>
-        {{if .Chain}}
-            <a href="/download-chain?domain={{.Domain}}" 
-               class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 
-                      text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                <span class="mr-2">⬇️</span>
-                Download Full Chain
-            </a>
-        {{end}}
     </div>
-    {{if not (isCompleteChain .Chain)}}
-        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
-            <div class="flex">
-                <div class="flex-shrink-0">
-                    <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                    </svg>
-                </div>
-                <div class="ml-3">
-                    <p class="text-sm text-yellow-700">
-                        This chain is incomplete. The root certificate ({{(lastCert .Chain).Issuer.CommonName}}) is not included in the server response.
-                        Use the download button to get the complete chain including the root certificate.
-                    </p>
-                </div>
-            </div>
-        </div>
-    {{end}}
-    <div class="flex flex-col items-center space-y-8 py-4">
+
+    <div class="flex flex-col items-center space-y-2 py-4">
         {{range $i, $cert := .Chain}}
             {{if gt $i 0}}
-                <div class="h-8 w-0.5 bg-gradient-to-b from-green-500 to-green-500"></div>
+                <div class="h-2 w-0 border-l-2 border-dashed border-gray-300"></div>
             {{end}}
             <div class="w-full max-w-md bg-gradient-to-r from-gray-50 to-gray-100 border-2 
                         {{if eq $i 0}}
@@ -88,16 +64,14 @@ const ChainVisualization = `
                         {{else}}
                             border-gray-300 shadow-gray-100
                         {{end}}
-                        rounded-lg p-4 relative shadow-lg hover:shadow-xl transition-shadow duration-200">
+                        rounded-lg p-4 relative hover:shadow-sm transition-shadow duration-200">
                 {{if gt $i 0}}
-                    <div class="absolute -top-8 left-1/2 transform -translate-x-1/2 w-0.5 h-8 bg-gradient-to-t from-green-500 to-green-500"></div>
+                    <div class="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-2 border-l-2 border-dashed border-gray-300"></div>
                 {{end}}
                 <div class="text-center">
                     <div class="font-mono text-lg font-semibold mb-2">
                         {{if eq $i 0}}
                             🌐 {{$cert.Subject.CommonName}}
-                        {{else if eq $i (sub (len $.Chain) 1)}}
-                            🔐 {{$cert.Subject.CommonName}}
                         {{else}}
                             🔗 {{$cert.Subject.CommonName}}
                         {{end}}
@@ -111,12 +85,43 @@ const ChainVisualization = `
                 </div>
             </div>
         {{end}}
+
+        {{if and (not (isCompleteChain .Chain)) (not (isSelfSigned (lastCert .Chain)))}}
+            <div class="h-2 w-0 border-l-2 border-dashed border-gray-300"></div>
+            <div class="w-full max-w-md border-2 border-dashed border-gray-300 
+                       rounded-lg p-4 relative opacity-50 bg-gray-50">
+                <div class="text-center">
+                    <div class="font-mono text-lg font-semibold mb-2 text-gray-500">
+                        🔐 {{(lastCert .Chain).Issuer.CommonName}}
+                    </div>
+                    <div class="text-xs text-gray-500 mt-2">
+                        Root Certificate (Not Included)
+                    </div>
+                </div>
+            </div>
+        {{end}}
+    </div>
+
+    <div class="mt-8 flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
+        {{if and (not (isCompleteChain .Chain)) (not (isSelfSigned (lastCert .Chain)))}}
+            <div class="text-sm text-gray-600 flex items-center">
+                <span class="mr-2">ℹ️</span>
+                Note: Root certificate ({{(lastCert .Chain).Issuer.CommonName}}) is not included in the server response, which is normal.
+            </div>
+        {{end}}
+        {{if .Chain}}
+            <a href="/download-chain?domain={{.Domain}}" 
+               class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 
+                      text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                <span class="mr-2">⬇️</span>
+                Download Full Chain
+            </a>
+        {{end}}
     </div>
 </div>`
 
 const ChainSection = `
 {{if .Chain}}
-` + ChainVisualization + `
 <div class="bg-white rounded-lg shadow-md p-6 mb-6">
     <h2 class="text-2xl font-bold mb-4">📜 Certificate Details</h2>
     {{range $index, $cert := .Chain}}
@@ -171,4 +176,4 @@ const ChainSection = `
     </div>
     {{end}}
 </div>
-{{end}}` 
+{{end}}`

@@ -48,25 +48,35 @@ func HandleCheck(w http.ResponseWriter, r *http.Request) {
 		Chain       []*certificate.CertificateInfo
 		HPKP        *hpkp.HPKPInfo
 		DNS         *dns.DNSInfo
+		Title       string
 	}{
 		Domain:      domain,
 		Certificate: certInfo,
 		Chain:       chain,
 		HPKP:        hpkpInfo,
 		DNS:         dnsInfo,
+		Title:       "Results for " + domain,
 	}
 
-	// Create template with functions
+	// Create template functions map
 	funcMap := template.FuncMap{
-		"add":  func(a, b int) int { return a + b },
-		"sub":  func(a, b int) int { return a - b },
-		"join": strings.Join,
+		"add":            func(a, b int) int { return a + b },
+		"sub":            func(a, b int) int { return a - b },
+		"join":           strings.Join,
 		"isCompleteChain": func(chain []*certificate.CertificateInfo) bool {
 			if len(chain) == 0 {
 				return false
 			}
 			lastCert := chain[len(chain)-1]
+			// Check if the last certificate is self-signed (subject == issuer)
 			return lastCert.Subject.CommonName == lastCert.Issuer.CommonName
+		},
+		"isSelfSigned": func(cert *certificate.CertificateInfo) bool {
+			if cert == nil {
+				return false
+			}
+			// A certificate is self-signed if its subject equals its issuer
+			return cert.Subject.CommonName == cert.Issuer.CommonName
 		},
 		"lastCert": func(chain []*certificate.CertificateInfo) *certificate.CertificateInfo {
 			if len(chain) == 0 {
@@ -76,7 +86,9 @@ func HandleCheck(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	tmpl := template.Must(template.New("check").Funcs(funcMap).Parse(templates.BaseTemplate))
+	// Parse template with functions
+	tmpl := template.Must(template.New("result").Funcs(funcMap).Parse(templates.ResultTemplate))
+
 	if err := tmpl.Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

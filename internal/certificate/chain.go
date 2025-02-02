@@ -11,55 +11,31 @@ import (
 )
 
 func GetCertificateChain(domain string) ([]*CertificateInfo, error) {
-	// Get the initial certificate
-	cert, err := getLeafCertificate(domain)
+	// Get the raw certificates
+	rawCerts, err := GetRawCertificateChain(domain)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build the chain
+	// Convert all certificates to CertificateInfo
 	chain := []*CertificateInfo{}
-	seen := make(map[string]bool)
-
-	current := cert
-	for {
-		// Convert to our certificate info format
+	for _, cert := range rawCerts {
 		info := &CertificateInfo{
-			Version:       current.Version,
-			SerialNumber: fmt.Sprintf("%x", current.SerialNumber),
-			Subject:      current.Subject,
-			Issuer:       current.Issuer,
-			NotBefore:    current.NotBefore,
-			NotAfter:     current.NotAfter,
-			SignatureAlg: current.SignatureAlgorithm,
+			Version:       cert.Version,
+			SerialNumber: fmt.Sprintf("%x", cert.SerialNumber),
+			Subject:      cert.Subject,
+			Issuer:       cert.Issuer,
+			NotBefore:    cert.NotBefore,
+			NotAfter:     cert.NotAfter,
+			SignatureAlg: cert.SignatureAlgorithm,
 		}
 
 		// Add SANs if present
-		if len(current.DNSNames) > 0 {
-			info.SubjectAltNames = current.DNSNames
+		if len(cert.DNSNames) > 0 {
+			info.SubjectAltNames = cert.DNSNames
 		}
 
 		chain = append(chain, info)
-
-		// Stop if we've reached a root (self-signed) certificate
-		if current.IsCA && current.Subject.String() == current.Issuer.String() {
-			break
-		}
-
-		// Get the next certificate in the chain
-		next, err := getIssuerCertificate(current)
-		if err != nil || next == nil {
-			break
-		}
-
-		// Prevent infinite loops
-		fingerprint := fmt.Sprintf("%x", next.Raw)
-		if seen[fingerprint] {
-			break
-		}
-		seen[fingerprint] = true
-
-		current = next
 	}
 
 	return chain, nil
@@ -112,4 +88,4 @@ func getIssuerCertificate(cert *x509.Certificate) (*x509.Certificate, error) {
 	}
 
 	return nil, fmt.Errorf("could not find issuer certificate")
-} 
+}

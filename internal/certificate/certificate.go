@@ -68,22 +68,39 @@ func GetCertificateInfo(domain string) (*CertificateInfo, error) {
 		return info, nil
 	}
 
-	// Then validate the certificate chain
-	if err := validateCertificate(domain, cert); err != nil {
+	// Get the complete chain including root
+	fullChain, err := GetFullCertificateChain(domain)
+	if err != nil {
 		info.IsValidated = false
 		info.ValidationError = err.Error()
+		info.TrustStatus = "valid" // Changed from "invalid" since the cert might be valid
+		return info, nil
+	}
 
-		// Check specific error types
-		switch {
-		case strings.Contains(err.Error(), "certificate has expired"):
-			info.TrustStatus = "expired"
-		case strings.Contains(err.Error(), "certificate is revoked"):
-			info.TrustStatus = "revoked"
-		case strings.Contains(err.Error(), "self signed"):
-			info.TrustStatus = "untrusted_root"
-		default:
-			info.TrustStatus = "valid" // Changed from "invalid" since the cert might be valid even if we can't verify it
-		}
+	// Create a cert pool and add the root certificate
+	rootPool := x509.NewCertPool()
+	if len(fullChain) > 0 {
+		rootPool.AddCert(fullChain[len(fullChain)-1])
+	}
+
+	// Create intermediate cert pool
+	intermediatePool := x509.NewCertPool()
+	for i := 1; i < len(fullChain)-1; i++ {
+		intermediatePool.AddCert(fullChain[i])
+	}
+
+	// Verify the certificate chain
+	opts := x509.VerifyOptions{
+		DNSName:       domain,
+		Intermediates: intermediatePool,
+		Roots:        rootPool,
+		CurrentTime:   now,
+	}
+
+	if _, err := cert.Verify(opts); err != nil {
+		info.IsValidated = false
+		info.ValidationError = err.Error()
+		info.TrustStatus = "valid" // The cert might be valid even if we can't verify it
 	} else {
 		info.IsValidated = true
 		info.TrustStatus = "trusted"
@@ -106,88 +123,136 @@ func GetCertificateInfo(domain string) (*CertificateInfo, error) {
 // incomplete (i.e. it does not include a self-signed root certificate), then the function
 // loads the fallback certificate chain from the embedded PEM file and merges them.
 func GetFullCertificateChain(domain string) ([]*x509.Certificate, error) {
-	// Retrieve the certificate chain using the existing function.
 	chain, err := GetRawCertificateChain(domain)
 	if err != nil {
-		// If error retrieving chain, return error
 		return nil, fmt.Errorf("failed to retrieve certificate chain for %s: %v", domain, err)
 	}
 
 	// Check if the retrieved chain is complete.
-	if !isCompleteChain(chain) {
-		// Get the issuer name of the last certificate in our chain
-		lastCert := chain[len(chain)-1]
-		issuerName := lastCert.Issuer.CommonName
+	if !IsCompleteChain(chain) {
+		// Try to complete the chain by following issuer relationships
+		var completeChain []*x509.Certificate
+		completeChain = append(completeChain, chain...)
+		
+		currentCert := chain[len(chain)-1]
+		seen := make(map[string]bool)
 
-		// Retrieve the fallback chain and merge with the retrieved chain.
-		fallbackChain, fbErr := GetFallbackChain(issuerName)
-		if fbErr == nil {
-			chain = MergeChains(chain, fallbackChain)
+		// Keep looking for issuers until we find a self-signed certificate
+		for !IsSelfSigned(currentCert) {
+			// Prevent infinite loops
+			if seen[currentCert.Issuer.CommonName] {
+				break
+			}
+			seen[currentCert.Issuer.CommonName] = true
+
+			// Look for a certificate that matches the current issuer
+			rootCert, err := GetFallbackChain(currentCert.Issuer.CommonName, "")
+			if err == nil && len(rootCert) > 0 {
+				// Verify this certificate is actually the issuer
+				if err := currentCert.CheckSignatureFrom(rootCert[0]); err == nil {
+					// Only add the root certificate if it's not already in the chain
+					if !certificateExists(completeChain, rootCert[0]) {
+						completeChain = append(completeChain, rootCert[0])
+					}
+					if IsSelfSigned(rootCert[0]) {
+						break // We found the root, stop here
+					}
+					currentCert = rootCert[0]
+					continue
+				}
+			}
+			break
 		}
-		// If fallback loading fails, continue with what we have.
+		
+		chain = completeChain
 	}
 
 	return chain, nil
 }
 
-// isCompleteChain checks if the certificate chain is complete by verifying that the last certificate is self-signed.
-func isCompleteChain(chain []*x509.Certificate) bool {
+// Helper function to check if a certificate already exists in the chain
+func certificateExists(chain []*x509.Certificate, cert *x509.Certificate) bool {
+	for _, c := range chain {
+		if certificatesEqual(c, cert) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsCompleteChain checks if the certificate chain is complete by verifying that the last certificate is self-signed.
+func IsCompleteChain(chain []*x509.Certificate) bool {
 	if len(chain) == 0 {
 		return false
 	}
 	lastCert := chain[len(chain)-1]
-	return isSelfSigned(lastCert)
+	return IsSelfSigned(lastCert)
 }
 
-// isSelfSigned determines whether a certificate is self-signed.
-func isSelfSigned(cert *x509.Certificate) bool {
+// IsSelfSigned determines whether a certificate is self-signed.
+func IsSelfSigned(cert *x509.Certificate) bool {
 	// A certificate is self-signed if it can verify its own signature.
 	return cert.CheckSignatureFrom(cert) == nil
 }
 
-// GetFallbackChain retrieves the fallback certificate chain using rootcerts
-func GetFallbackChain(issuerName string) ([]*x509.Certificate, error) {
-	// Get all trusted certificates from rootcerts
-	rootCerts := rootcerts.Certs()
-	fmt.Printf("Looking for issuer: %s\n", issuerName)
+// MergeChains merges two certificate chains, avoiding duplicate certificates.
+func MergeChains(chain1, chain2 []*x509.Certificate) []*x509.Certificate {
+	merged := make([]*x509.Certificate, 0, len(chain1)+len(chain2))
+	seen := make(map[string]bool)
 
-	var certs []*x509.Certificate
+	// Add all certificates from chain1
+	for _, cert := range chain1 {
+		certKey := string(cert.Raw)
+		if !seen[certKey] {
+			merged = append(merged, cert)
+			seen[certKey] = true
+		}
+	}
+
+	// Add only new certificates from chain2 (root certificates)
+	for _, cert := range chain2 {
+		certKey := string(cert.Raw)
+		// Additional check to ensure we're not adding a duplicate of the last cert
+		if !seen[certKey] && !certificatesEqual(cert, merged[len(merged)-1]) {
+			merged = append(merged, cert)
+			seen[certKey] = true
+		}
+	}
+
+	return merged
+}
+
+// certificatesEqual compares two certificates to check if they are the same
+func certificatesEqual(cert1, cert2 *x509.Certificate) bool {
+	return cert1.Subject.CommonName == cert2.Subject.CommonName &&
+		   cert1.Issuer.CommonName == cert2.Issuer.CommonName &&
+		   cert1.SerialNumber.Cmp(cert2.SerialNumber) == 0
+}
+
+// GetFallbackChain retrieves the fallback certificate chain using rootcerts
+func GetFallbackChain(issuerName string, issuerOrg string) ([]*x509.Certificate, error) {
+	rootCerts := rootcerts.Certs()
+	fmt.Printf("Looking for CA: %s\n", issuerName)
+
+	var matchingCerts []*x509.Certificate
 	for _, cert := range rootCerts {
 		x509Cert := cert.X509Cert()
 		if x509Cert == nil {
 			continue
 		}
 		
-		// If issuerName is provided, only return matching certificates
-		if issuerName != "" {
-			if x509Cert.Subject.CommonName == issuerName || strings.Contains(x509Cert.Subject.CommonName, issuerName) {
-				certs = append(certs, x509Cert)
-				fmt.Printf("Found matching certificate: %s\n", x509Cert.Subject.CommonName)
-			}
-		} else {
-			certs = append(certs, x509Cert)
+		// Check for matching CommonName
+		if x509Cert.Subject.CommonName == issuerName {
+			fmt.Printf("Found matching CA: %s\n", x509Cert.Subject.CommonName)
+			matchingCerts = append(matchingCerts, x509Cert)
 		}
 	}
 
-	if len(certs) == 0 {
-		return nil, fmt.Errorf("no matching certificates found for issuer: %s", issuerName)
+	if len(matchingCerts) == 0 {
+		return nil, fmt.Errorf("no matching certificate found for: %s", issuerName)
 	}
-	return certs, nil
-}
 
-// MergeChains merges two certificate chains, avoiding duplicate certificates.
-func MergeChains(chain1, chain2 []*x509.Certificate) []*x509.Certificate {
-	merged := chain1
-	certMap := make(map[string]bool)
-	for _, cert := range chain1 {
-		certMap[string(cert.Raw)] = true
-	}
-	for _, cert := range chain2 {
-		if !certMap[string(cert.Raw)] {
-			merged = append(merged, cert)
-		}
-	}
-	return merged
+	return matchingCerts, nil
 }
 
 // GetRawCertificateChain retrieves the full chain of x509 certificates presented by the server.
@@ -206,7 +271,36 @@ func GetRawCertificateChain(domain string) ([]*x509.Certificate, error) {
 // CertificateChainToPEM converts a slice of x509 certificates to PEM format
 func CertificateChainToPEM(chain []*x509.Certificate) []byte {
 	var pemData []byte
-	for _, cert := range chain {
+	
+	// Add header comment
+	headerComment := "# SSL Certificate Chain\n" +
+		"# Generated by SSL-Toolkit\n" +
+		"# https://github.com/russmckendrick/ssl-toolkit\n\n"
+	pemData = append(pemData, []byte(headerComment)...)
+
+	for i, cert := range chain {
+		// Add descriptive comment for each certificate
+		var certType string
+		switch {
+		case i == 0:
+			certType = "Leaf/Server Certificate"
+		case i == len(chain)-1:
+			certType = "Root Certificate"
+		default:
+			certType = "Intermediate Certificate"
+		}
+
+		comment := fmt.Sprintf("\n# Certificate %d (%s)\n", i+1, certType)
+		comment += fmt.Sprintf("# Subject: %s\n", cert.Subject.CommonName)
+		if len(cert.Subject.Organization) > 0 {
+			comment += fmt.Sprintf("# Organization: %s\n", strings.Join(cert.Subject.Organization, ", "))
+		}
+		comment += fmt.Sprintf("# Issuer: %s\n", cert.Issuer.CommonName)
+		comment += fmt.Sprintf("# Valid Until: %s\n", cert.NotAfter.Format("2006-01-02"))+"\n"
+		
+		pemData = append(pemData, []byte(comment)...)
+
+		// Add the certificate in PEM format
 		block := &pem.Block{
 			Type:  "CERTIFICATE",
 			Bytes: cert.Raw,
