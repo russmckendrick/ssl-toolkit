@@ -1,0 +1,68 @@
+name: Update Homebrew Tap
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-tap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download checksums
+        run: |
+          mkdir -p build
+          VERSION=${GITHUB_REF#refs/tags/}
+          curl -L -o build/ssl-toolkit-darwin-amd64.sha256 https://github.com/${{ github.repository }}/releases/download/${VERSION}/ssl-toolkit-darwin-amd64.sha256
+          curl -L -o build/ssl-toolkit-darwin-arm64.sha256 https://github.com/${{ github.repository }}/releases/download/${VERSION}/ssl-toolkit-darwin-arm64.sha256
+
+      - name: Clone homebrew-tap
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update Formula
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          AMD64_SHA=$(cat build/ssl-toolkit-darwin-amd64.sha256 | cut -d' ' -f1)
+          ARM64_SHA=$(cat build/ssl-toolkit-darwin-arm64.sha256 | cut -d' ' -f1)
+          
+          cd homebrew-tap
+          mkdir -p Formula
+          
+          cat > Formula/ssl-toolkit.rb << EOF
+          class SslToolkit < Formula
+            desc "SSL certificate toolkit"
+            homepage "https://github.com/${{ github.repository }}"
+            version "${VERSION#v}"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/${{ github.repository }}/releases/download/${VERSION}/ssl-toolkit-darwin-arm64"
+                sha256 "${ARM64_SHA}"
+              else
+                url "https://github.com/${{ github.repository }}/releases/download/${VERSION}/ssl-toolkit-darwin-amd64"
+                sha256 "${AMD64_SHA}"
+              end
+            end
+
+            def install
+              if Hardware::CPU.arm?
+                bin.install "ssl-toolkit-darwin-arm64" => "ssl-toolkit"
+              else
+                bin.install "ssl-toolkit-darwin-amd64" => "ssl-toolkit"
+              end
+            end
+
+            test do
+              system "#{bin}/ssl-toolkit", "--version"
+            end
+          end
+          EOF
+
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          git add Formula/ssl-toolkit.rb
+          git commit -m "Update ssl-toolkit to ${VERSION}"
+          git push 
