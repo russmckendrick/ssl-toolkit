@@ -8,6 +8,7 @@ A Go tool for checking SSL certificates, certificate chains, and DNS information
 - 🔗 Full certificate chain analysis
 - ⚠️ Trust status verification
 - 📅 Expiration checking
+- 📅 Certificate expiry reminders (iCal format)
 - 🚫 Revocation checking
 - 📌 HPKP (HTTP Public Key Pinning) checking
 - 🌐 DNS record lookup
@@ -54,6 +55,36 @@ make run
 go run cmd/ssl-toolkit/main.go example.com
 ```
 
+### Additional Commands
+
+#### Download Certificate Chain
+```bash
+# Save chain to default file (<domain>-chain.pem)
+./build/ssl-toolkit example.com --download-chain
+
+# Specify output file
+./build/ssl-toolkit example.com --download-chain --output mycerts.pem
+```
+
+#### Create Certificate Expiry Reminder
+```bash
+# Create reminder (saves to <domain>-cert-expiry.ics)
+./build/ssl-toolkit example.com --create-reminder
+
+# Specify output file
+./build/ssl-toolkit example.com --create-reminder --reminder-file myreminder.ics
+```
+The reminder will be set for 30 days before the certificate expires and includes:
+- Calendar event with expiry details
+- Additional 7-day warning alarm
+- Description with renewal instructions
+
+#### List Available Root Certificates
+```bash
+./build/ssl-toolkit --list-certs
+```
+This command displays all root certificates available in your system's trust store.
+
 The tool accepts various input formats and will automatically clean the domain:
 
 ```bash
@@ -66,6 +97,7 @@ The tool accepts various input formats and will automatically clean the domain:
 
 ## Example Output
 
+### Basic Certificate Check
 ```
 === 🔒 SSL Certificate Information ===
 🏢 Issuer: WE1
@@ -79,6 +111,22 @@ The tool accepts various input formats and will automatically clean the domain:
 
 === 🔗 Certificate Chain ===
 ...
+```
+
+### List Certificates Output
+```
+📜 Found 132 Available Root Certificates:
+
+- GlobalSign Root CA
+- DigiCert Global Root CA
+- Let's Encrypt Root X1
+...
+```
+
+### Create Reminder Output
+```
+✅ Certificate expiry reminder saved to example.com-cert-expiry.ics
+📅 Reminder set for 30 days before expiry (2025-02-17)
 ```
 
 ## Certificate Status Types
