@@ -24,6 +24,8 @@ func main() {
 	var outputFile string
 	var listCerts bool
 	var debug bool
+	var createReminder bool
+	var reminderFile string
 
 	var rootCmd = &cobra.Command{
 		Use:   "ssl-toolkit [domain]",
@@ -104,6 +106,40 @@ func main() {
 				return
 			}
 
+			// If create-reminder flag is set
+			if createReminder {
+				domain, err := utils.CleanDomain(args[0])
+				if err != nil {
+					fmt.Printf("❌ Error: %v\n", err)
+					os.Exit(1)
+				}
+
+				certInfo, err := certificate.GetCertificateInfo(domain)
+				if err != nil {
+					fmt.Printf("❌ Error getting certificate: %v\n", err)
+					os.Exit(1)
+				}
+
+				// Generate iCal content
+				icalContent := certificate.GenerateExpiryReminder(domain, certInfo.NotAfter)
+
+				// If no reminder file specified, use domain name
+				if reminderFile == "" {
+					reminderFile = fmt.Sprintf("%s-cert-expiry.ics", domain)
+				}
+
+				// Write to file
+				if err := os.WriteFile(reminderFile, icalContent, 0644); err != nil {
+					fmt.Printf("❌ Error writing reminder file: %v\n", err)
+					os.Exit(1)
+				}
+
+				fmt.Printf("✅ Certificate expiry reminder saved to %s\n", reminderFile)
+				fmt.Printf("📅 Reminder set for 30 days before expiry (%s)\n", 
+					certInfo.NotAfter.AddDate(0, 0, -30).Format("2006-01-02"))
+				return
+			}
+
 			domain, err := utils.CleanDomain(domain)
 			if err != nil {
 				fmt.Printf("❌ Error: %v\n", err)
@@ -157,6 +193,8 @@ func main() {
 	rootCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file for certificate chain (default: <domain>-chain.pem)")
 	rootCmd.Flags().BoolVarP(&listCerts, "list-certs", "l", false, "List all available root certificates")
 	rootCmd.Flags().BoolVarP(&debug, "debug", "v", false, "Enable verbose debug output")
+	rootCmd.Flags().BoolVarP(&createReminder, "create-reminder", "r", false, "Create an iCal reminder for certificate expiry")
+	rootCmd.Flags().StringVarP(&reminderFile, "reminder-file", "i", "", "Output file for iCal reminder (default: <domain>-cert-expiry.ics)")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
