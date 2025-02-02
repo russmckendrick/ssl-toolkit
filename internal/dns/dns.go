@@ -58,6 +58,30 @@ type DNSInfo struct {
 	IsConsistent     bool
 }
 
+func extractBaseDomain(domain string) string {
+	// Split the domain into parts
+	parts := strings.Split(domain, ".")
+	
+	// If we have 3 or more parts (e.g., www.example.com)
+	// and the first part is a common subdomain, remove it
+	if len(parts) >= 3 {
+		commonSubdomains := map[string]bool{
+			"www": true,
+			"mail": true,
+			"smtp": true,
+			"pop": true,
+			"imap": true,
+			"webmail": true,
+		}
+		
+		if commonSubdomains[parts[0]] {
+			return strings.Join(parts[1:], ".")
+		}
+	}
+	
+	return domain
+}
+
 func GetDNSRecords(domain string, resolver *net.Resolver) (DNSRecords, error) {
 	ctx := context.Background()
 	records := DNSRecords{}
@@ -68,96 +92,52 @@ func GetDNSRecords(domain string, resolver *net.Resolver) (DNSRecords, error) {
 		return axfrRecords, nil
 	}
 
-	// If AXFR fails, fall back to individual queries
-	// Common subdomains to check
-	subdomains := []string{
-		"",           // apex
-		"www",
-		"mail",
-		"smtp",
-		"pop",
-		"imap",
-		"webmail",
-		"remote",
-		"vpn",
-		"ftp",
-		"files",
-		"cloud",
-		"cdn",
-		"api",
-		"dev",
-		"staging",
-		"test",
-		"admin",
-		"portal",
-		"intranet",
-		"extranet",
-		"blog",
-		"shop",
-		"store",
-		"m",          // mobile
-		"app",
-		"gateway",
-		"secure",
-		"autodiscover", // Exchange/O365
-		"_domainkey",   // DKIM
-		"_dmarc",       // DMARC
-	}
-
-	// Query each subdomain
-	for _, sub := range subdomains {
-		target := domain
-		if sub != "" {
-			target = sub + "." + domain
-		}
-
-		// A records
-		if ips, err := resolver.LookupIPAddr(ctx, target); err == nil {
-			for _, ip := range ips {
-				if ipv4 := ip.IP.To4(); ipv4 != nil {
-					records.A = append(records.A, fmt.Sprintf("%s: %s", target, ipv4.String()))
-				} else {
-					records.AAAA = append(records.AAAA, fmt.Sprintf("%s: %s", target, ip.IP.String()))
-				}
+	// Get A records
+	if ips, err := resolver.LookupIPAddr(ctx, domain); err == nil {
+		for _, ip := range ips {
+			if ipv4 := ip.IP.To4(); ipv4 != nil {
+				records.A = append(records.A, fmt.Sprintf("%s: %s", domain, ipv4.String()))
+			} else {
+				records.AAAA = append(records.AAAA, fmt.Sprintf("%s: %s", domain, ip.IP.String()))
 			}
 		}
-
-		// CNAME records
-		if cname, err := resolver.LookupCNAME(ctx, target); err == nil {
-			records.CNAME = append(records.CNAME, fmt.Sprintf("%s → %s", target, cname))
-		}
 	}
 
-	// Rest of existing record lookups...
+	// Get MX records
 	if mxs, err := resolver.LookupMX(ctx, domain); err == nil {
 		for _, mx := range mxs {
 			records.MX = append(records.MX, fmt.Sprintf("%s (priority: %d)", mx.Host, mx.Pref))
 		}
 	}
 
-	// TXT records
+	// Get TXT records
 	if txts, err := resolver.LookupTXT(ctx, domain); err == nil {
 		records.TXT = txts
 	}
 
-	// NS records
+	// Get CNAME records
+	if cname, err := resolver.LookupCNAME(ctx, domain); err == nil {
+		records.CNAME = append(records.CNAME, fmt.Sprintf("%s → %s", domain, cname))
+	}
+
+	// Get NS records
 	if nss, err := resolver.LookupNS(ctx, domain); err == nil {
 		for _, ns := range nss {
 			records.NS = append(records.NS, ns.Host)
 		}
 	}
 
-	// CAA records (using miekg/dns for CAA since net package doesn't support it)
+	// Get CAA records
 	records.CAA = lookupCAA(domain)
 
-	// SRV records (common services)
+	// Get SRV records for common services
 	services := []string{"_http._tcp", "_https._tcp", "_sip._tcp", "_xmpp-server._tcp"}
 	for _, service := range services {
 		if _, addrs, err := resolver.LookupSRV(ctx, "", service, domain); err == nil {
 			for _, srv := range addrs {
 				records.SRV = append(records.SRV, 
-					fmt.Sprintf("%s:%d (priority: %d, weight: %d)", 
-						srv.Target, srv.Port, srv.Priority, srv.Weight))
+					fmt.Sprintf("%s.%s:%d (priority: %d, weight: %d)", 
+						service, domain, srv.Port, srv.Priority, srv.Weight))
 			}
 		}
 	}
@@ -242,6 +222,9 @@ func lookupCAA(domain string) []string {
 }
 
 func GetDNSInfo(domain string) (*DNSInfo, error) {
+	// Extract base domain for nameserver lookups
+	baseDomain := extractBaseDomain(domain)
+	
 	info := &DNSInfo{}
 	
 	// Setup HTTP client with timeout
@@ -249,25 +232,41 @@ func GetDNSInfo(domain string) (*DNSInfo, error) {
 		Timeout: 10 * time.Second,
 	}
 
-	// Get nameservers
-	nameservers, err := net.LookupNS(domain)
-	if err != nil {
-		return nil, fmt.Errorf("failed to lookup nameservers: %w", err)
-	}
-
-	// First get the canonical records
+	// First get IP addresses for the FQDN
 	ipv4, err := net.LookupIP(domain)
 	if err != nil {
 		return nil, err
 	}
 
-	// Separate IPv4 and IPv6 addresses for canonical records
+	// Separate IPv4 and IPv6 addresses
 	for _, ip := range ipv4 {
 		if ipv4 := ip.To4(); ipv4 != nil {
 			info.IPv4Addresses = append(info.IPv4Addresses, ipv4.String())
 		} else {
 			info.IPv6Addresses = append(info.IPv6Addresses, ip.String())
 		}
+	}
+
+	// Get IP details for IPv4
+	for _, ip := range info.IPv4Addresses {
+		details, err := getIPDetails(ip, client)
+		if err == nil {
+			info.IPv4Details = append(info.IPv4Details, details)
+		}
+	}
+
+	// Get IP details for IPv6
+	for _, ip := range info.IPv6Addresses {
+		details, err := getIPDetails(ip, client)
+		if err == nil {
+			info.IPv6Details = append(info.IPv6Details, details)
+		}
+	}
+
+	// Get nameservers using base domain
+	nameservers, err := net.LookupNS(baseDomain)
+	if err != nil {
+		return nil, fmt.Errorf("failed to lookup nameservers: %w", err)
 	}
 
 	// Create default resolver for canonical records
@@ -295,7 +294,7 @@ func GetDNSInfo(domain string) (*DNSInfo, error) {
 			},
 		}
 
-		// Get all DNS records from this nameserver
+		// Get all DNS records using the original domain
 		nsRecords, err := GetDNSRecords(domain, r)
 		if err != nil {
 			check.IsConsistent = false
@@ -311,22 +310,6 @@ func GetDNSInfo(domain string) (*DNSInfo, error) {
 		}
 
 		info.NameserverChecks = append(info.NameserverChecks, check)
-	}
-
-	// Get IP details for IPv4
-	for _, ip := range info.IPv4Addresses {
-		details, err := getIPDetails(ip, client)
-		if err == nil {
-			info.IPv4Details = append(info.IPv4Details, details)
-		}
-	}
-
-	// Get IP details for IPv6
-	for _, ip := range info.IPv6Addresses {
-		details, err := getIPDetails(ip, client)
-		if err == nil {
-			info.IPv6Details = append(info.IPv6Details, details)
-		}
 	}
 
 	return info, nil

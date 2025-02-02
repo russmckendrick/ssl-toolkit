@@ -63,24 +63,6 @@ func DisplayDNSInfo(info *DNSInfo) {
 
 	fmt.Println("\n=== 🌐 DNS Information ===")
 
-	// Display nameserver consistency check
-	bold.Println("\n🔍 Nameserver Consistency Check:")
-	if info.IsConsistent {
-		green.Println("  ✅ All nameservers are consistent")
-	} else {
-		red.Println("  ⚠️  Inconsistencies detected between nameservers")
-	}
-
-	// Display nameserver status
-	for _, ns := range info.NameserverChecks {
-		bold.Printf("\n📡 Nameserver: %s\n", ns.Nameserver)
-		if ns.IsConsistent {
-			green.Println("  ✓ Records match canonical records")
-		} else {
-			red.Println("  ✗ Records differ from canonical records")
-		}
-	}
-
 	// Display IPv4 addresses
 	if len(info.IPv4Addresses) > 0 {
 		bold.Println("\n📍 IPv4 Addresses:")
@@ -118,6 +100,24 @@ func DisplayDNSInfo(info *DNSInfo) {
 					fmt.Printf("    Organization: %s\n", details.Organization)
 				}
 			}
+		}
+	}
+
+	// Display nameserver consistency check
+	bold.Println("\n🔍 Nameserver Consistency Check:")
+	if info.IsConsistent {
+		green.Println("  ✅ All nameservers are consistent")
+	} else {
+		red.Println("  ⚠️  Inconsistencies detected between nameservers")
+	}
+
+	// Display nameserver status
+	for _, ns := range info.NameserverChecks {
+		bold.Printf("\n📡 Nameserver: %s\n", ns.Nameserver)
+		if ns.IsConsistent {
+			green.Println("  ✓ Records match canonical records")
+		} else {
+			red.Println("  ✗ Records differ from canonical records")
 		}
 	}
 
