@@ -2,18 +2,16 @@ name: Update Homebrew Tap
 
 on:
   release:
-    types: [created, published]
+    types: [published]
 
 jobs:
   update-tap:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - name: Download checksums
         run: |
           mkdir -p build
-          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION=${{ github.event.release.tag_name }}
           echo "Downloading checksums for version: ${VERSION}"
           curl -L -o build/ssl-toolkit-darwin-amd64.sha256 https://github.com/${{ github.repository }}/releases/download/${VERSION}/ssl-toolkit-darwin-amd64.sha256
           curl -L -o build/ssl-toolkit-darwin-arm64.sha256 https://github.com/${{ github.repository }}/releases/download/${VERSION}/ssl-toolkit-darwin-arm64.sha256
@@ -27,7 +25,7 @@ jobs:
 
       - name: Update Formula
         run: |
-          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION=${{ github.event.release.tag_name }}
           echo "Updating formula for version: ${VERSION}"
           AMD64_SHA=$(cat build/ssl-toolkit-darwin-amd64.sha256 | cut -d' ' -f1)
           ARM64_SHA=$(cat build/ssl-toolkit-darwin-arm64.sha256 | cut -d' ' -f1)
