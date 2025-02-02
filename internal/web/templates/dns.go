@@ -26,22 +26,6 @@ const DNSSection = `
                 {{else}}
                 <p class="text-red-600">✗ Records differ from canonical records</p>
                 {{end}}
-                {{if .IPv4Addresses}}
-                <div class="mt-2">
-                    <p class="font-semibold">IPv4 Records:</p>
-                    {{range .IPv4Addresses}}
-                    <p class="font-mono ml-4">{{.}}</p>
-                    {{end}}
-                </div>
-                {{end}}
-                {{if .IPv6Addresses}}
-                <div class="mt-2">
-                    <p class="font-semibold">IPv6 Records:</p>
-                    {{range .IPv6Addresses}}
-                    <p class="font-mono ml-4">{{.}}</p>
-                    {{end}}
-                </div>
-                {{end}}
             </div>
         {{end}}
         </div>
@@ -88,6 +72,87 @@ const DNSSection = `
             </div>
             {{end}}
         </div>
+    </div>
+    {{end}}
+
+    {{if len .DNS.NameserverChecks}}
+    <div class="mb-6">
+        <h3 class="text-xl font-bold mb-4">📋 DNS Records</h3>
+        <p class="text-sm text-gray-600 mb-4">(from nameserver: {{(index .DNS.NameserverChecks 0).Nameserver}})</p>
+        
+        {{with (index .DNS.NameserverChecks 0).Records}}
+            {{if .A}}
+            <div class="mb-4">
+                <h4 class="font-semibold mb-2">A Records</h4>
+                {{range .A}}
+                <p class="font-mono ml-4">{{.}}</p>
+                {{end}}
+            </div>
+            {{end}}
+
+            {{if .AAAA}}
+            <div class="mb-4">
+                <h4 class="font-semibold mb-2">AAAA Records</h4>
+                {{range .AAAA}}
+                <p class="font-mono ml-4">{{.}}</p>
+                {{end}}
+            </div>
+            {{end}}
+
+            {{if .MX}}
+            <div class="mb-4">
+                <h4 class="font-semibold mb-2">MX Records</h4>
+                {{range .MX}}
+                <p class="font-mono ml-4">{{.}}</p>
+                {{end}}
+            </div>
+            {{end}}
+
+            {{if .TXT}}
+            <div class="mb-4">
+                <h4 class="font-semibold mb-2">TXT Records</h4>
+                {{range .TXT}}
+                <p class="font-mono ml-4">{{.}}</p>
+                {{end}}
+            </div>
+            {{end}}
+
+            {{if .CNAME}}
+            <div class="mb-4">
+                <h4 class="font-semibold mb-2">CNAME Records</h4>
+                {{range .CNAME}}
+                <p class="font-mono ml-4">{{.}}</p>
+                {{end}}
+            </div>
+            {{end}}
+
+            {{if .NS}}
+            <div class="mb-4">
+                <h4 class="font-semibold mb-2">NS Records</h4>
+                {{range .NS}}
+                <p class="font-mono ml-4">{{.}}</p>
+                {{end}}
+            </div>
+            {{end}}
+
+            {{if .CAA}}
+            <div class="mb-4">
+                <h4 class="font-semibold mb-2">CAA Records</h4>
+                {{range .CAA}}
+                <p class="font-mono ml-4">{{.}}</p>
+                {{end}}
+            </div>
+            {{end}}
+
+            {{if .SRV}}
+            <div class="mb-4">
+                <h4 class="font-semibold mb-2">SRV Records</h4>
+                {{range .SRV}}
+                <p class="font-mono ml-4">{{.}}</p>
+                {{end}}
+            </div>
+            {{end}}
+        {{end}}
     </div>
     {{end}}
 </div>
