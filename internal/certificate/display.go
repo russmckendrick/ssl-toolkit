@@ -58,12 +58,30 @@ func DisplayCertificateInfo(cert *CertificateInfo) {
 	}
 }
 
+// Add helper function for CertificateInfo chain completeness
+func isCompleteInfoChain(chain []*CertificateInfo) bool {
+	if len(chain) == 0 {
+		return false
+	}
+	lastCert := chain[len(chain)-1]
+	return lastCert.Subject.CommonName == lastCert.Issuer.CommonName
+}
+
 func DisplayCertificateChain(chain []*CertificateInfo) {
 	bold := color.New(color.Bold)
-	fmt.Println("\n=== 🔗 Certificate Chain ===")
+	if len(chain) == 0 {
+		return
+	}
 
-	// First display the chain visualization
-	fmt.Println("\nChain Structure:")
+	fmt.Println("\n🔗 Certificate Chain Structure:")
+	
+	// Check if chain is incomplete
+	if !isCompleteInfoChain(chain) {
+		lastCert := chain[len(chain)-1]
+		fmt.Printf("\n⚠️  Chain is incomplete: Root certificate (%s) is not included in the server response.\n", lastCert.Issuer.CommonName)
+		fmt.Printf("Use --download-chain to get the complete certificate chain including the root certificate.\n\n")
+	}
+
 	for i, cert := range chain {
 		// Print the current certificate
 		prefix := "└── "

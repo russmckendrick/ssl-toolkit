@@ -18,6 +18,10 @@ import (
 func main() {
 	var webMode bool
 	var port string
+	var downloadChain bool
+	var outputFile string
+	var listCerts bool
+	var debug bool
 
 	var rootCmd = &cobra.Command{
 		Use:   "ssl-toolkit [domain]",
@@ -25,6 +29,23 @@ func main() {
 		Long:  `A tool for checking SSL certificates, certificate chains, and DNS information for domains.`,
 		Args:  cobra.MinimumNArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
+			// If list-certs flag is set, print all available root certificates
+			if listCerts {
+				certs, err := certificate.ListAvailableRootCerts()
+				if err != nil {
+					fmt.Printf("❌ Error listing certificates: %v\n", err)
+					if debug {
+						fmt.Printf("Debug: %+v\n", err)
+					}
+					os.Exit(1)
+				}
+				fmt.Printf("📜 Found %d Available Root Certificates:\n\n", len(certs))
+				for _, cert := range certs {
+					fmt.Printf("- %s\n", cert)
+				}
+				return
+			}
+
 			if webMode {
 				if len(args) > 0 {
 					// If domain is provided, redirect to check page
@@ -50,6 +71,32 @@ func main() {
 				domain = args[0]
 			} else {
 				domain = utils.PromptForDomain()
+			}
+
+			// If download chain flag is set
+			if downloadChain {
+				chain, err := certificate.GetFullCertificateChain(domain)
+				if err != nil {
+					fmt.Printf("❌ Error getting certificate chain: %v\n", err)
+					os.Exit(1)
+				}
+
+				// Convert chain to PEM format
+				pemData := certificate.CertificateChainToPEM(chain)
+
+				// If no output file specified, use domain name
+				if outputFile == "" {
+					outputFile = fmt.Sprintf("%s-chain.pem", domain)
+				}
+
+				// Write to file
+				if err := os.WriteFile(outputFile, pemData, 0644); err != nil {
+					fmt.Printf("❌ Error writing certificate chain: %v\n", err)
+					os.Exit(1)
+				}
+
+				fmt.Printf("✅ Certificate chain saved to %s\n", outputFile)
+				return
 			}
 
 			domain, err := utils.CleanDomain(domain)
@@ -101,6 +148,10 @@ func main() {
 
 	rootCmd.Flags().BoolVarP(&webMode, "web", "w", false, "Start in web mode")
 	rootCmd.Flags().StringVarP(&port, "port", "p", "8080", "Port to run web server on")
+	rootCmd.Flags().BoolVarP(&downloadChain, "download-chain", "d", false, "Download the certificate chain")
+	rootCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file for certificate chain (default: <domain>-chain.pem)")
+	rootCmd.Flags().BoolVarP(&listCerts, "list-certs", "l", false, "List all available root certificates")
+	rootCmd.Flags().BoolVarP(&debug, "debug", "v", false, "Enable verbose debug output")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -111,6 +162,7 @@ func main() {
 func startWebServer(port string) {
 	http.HandleFunc("/", handlers.HandleHome)
 	http.HandleFunc("/check", handlers.HandleCheck)
+	http.HandleFunc("/download-chain", handlers.HandleDownloadChain)
 
 	// Get domain from command line if provided
 	if len(os.Args) > 2 {
