@@ -7,8 +7,40 @@ import (
 
 func DisplayDNSInfo(info *DNSInfo) {
 	bold := color.New(color.Bold)
+	green := color.New(color.FgGreen)
+	red := color.New(color.FgRed)
 
 	fmt.Println("\n=== 🌐 DNS Information ===")
+
+	// Display nameserver consistency check
+	bold.Println("\n🔍 Nameserver Consistency Check:")
+	if info.IsConsistent {
+		green.Println("  ✅ All nameservers are consistent")
+	} else {
+		red.Println("  ⚠️  Inconsistencies detected between nameservers")
+	}
+
+	// Display nameserver details
+	for _, ns := range info.NameserverChecks {
+		bold.Printf("\n📡 Nameserver: %s\n", ns.Nameserver)
+		if ns.IsConsistent {
+			green.Println("  ✓ Records match canonical records")
+		} else {
+			red.Println("  ✗ Records differ from canonical records")
+		}
+		if len(ns.IPv4Addresses) > 0 {
+			fmt.Println("  IPv4 Records:")
+			for _, ip := range ns.IPv4Addresses {
+				fmt.Printf("    - %s\n", ip)
+			}
+		}
+		if len(ns.IPv6Addresses) > 0 {
+			fmt.Println("  IPv6 Records:")
+			for _, ip := range ns.IPv6Addresses {
+				fmt.Printf("    - %s\n", ip)
+			}
+		}
+	}
 
 	// Display IPv4 addresses
 	if len(info.IPv4Addresses) > 0 {
