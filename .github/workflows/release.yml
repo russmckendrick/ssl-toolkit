@@ -50,13 +50,27 @@ jobs:
           sha256sum ssl-toolkit-darwin-amd64 > ssl-toolkit-darwin-amd64.sha256
           sha256sum ssl-toolkit-darwin-arm64 > ssl-toolkit-darwin-arm64.sha256
 
+      - name: Debug Token (masked)
+        run: |
+          if [ -n "${{ secrets.HOMEBREW_TAP_TOKEN }}" ]; then
+            echo "HOMEBREW_TAP_TOKEN is set"
+          else
+            echo "HOMEBREW_TAP_TOKEN is NOT set"
+          fi
+
       - name: Clone and setup homebrew-tap
         run: |
-          git clone https://${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/${{ github.repository_owner }}/homebrew-tap.git || (
+          # Store token in a variable to ensure it's used
+          REPO_TOKEN="${{ secrets.HOMEBREW_TAP_TOKEN }}"
+          REPO_URL="https://${REPO_TOKEN}@github.com/${{ github.repository_owner }}/homebrew-tap.git"
+          
+          echo "Attempting to clone with token..."
+          git clone "${REPO_URL}" || (
+            echo "Initial clone failed, creating new repository..."
             mkdir homebrew-tap
             cd homebrew-tap
             git init
-            git remote add origin https://${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/${{ github.repository_owner }}/homebrew-tap.git
+            git remote add origin "${REPO_URL}"
             git checkout -b main
             echo "# Homebrew Tap" > README.md
             mkdir -p Formula
@@ -69,6 +83,10 @@ jobs:
 
       - name: Update Homebrew formula
         run: |
+          # Store token in a variable to ensure it's used
+          REPO_TOKEN="${{ secrets.HOMEBREW_TAP_TOKEN }}"
+          git config --global url."https://${REPO_TOKEN}@github.com/".insteadOf "https://github.com/"
+          
           VERSION=${GITHUB_REF#refs/tags/}
           AMD64_SHA=$(cat build/ssl-toolkit-darwin-amd64.sha256 | cut -d' ' -f1)
           ARM64_SHA=$(cat build/ssl-toolkit-darwin-arm64.sha256 | cut -d' ' -f1)
@@ -110,4 +128,6 @@ jobs:
           git config user.email "action@github.com"
           git add Formula/ssl-toolkit.rb
           git commit -m "Update ssl-toolkit to ${VERSION}"
-          git push 
+          
+          # Use token explicitly in push URL
+          git push "https://${REPO_TOKEN}@github.com/${{ github.repository_owner }}/homebrew-tap.git" 
