@@ -16,48 +16,62 @@ import (
 
 func HandleCheck(w http.ResponseWriter, r *http.Request) {
 	domain := r.URL.Query().Get("domain")
-	if domain == "" {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
+	targetIP := r.URL.Query().Get("ip")
+
+	var certInfo *certificate.CertificateInfo
+	var err error
+	var errorMessage string
+	var showRetryWithoutIP bool
+
+	if domain != "" {
+		domain, err = utils.CleanDomain(domain)
+		if err != nil {
+			errorMessage = fmt.Sprintf("Invalid domain: %v", err)
+		} else {
+			// Check certificate using IP if provided
+			if targetIP != "" {
+				certInfo, err = certificate.GetCertificateInfoWithIP(domain, targetIP)
+				if err != nil {
+					errorMessage = fmt.Sprintf("Failed to check certificate at IP %s: %v", targetIP, err)
+					showRetryWithoutIP = true
+				}
+			} else {
+				certInfo, err = certificate.GetCertificateInfo(domain)
+				if err != nil {
+					errorMessage = fmt.Sprintf("Failed to check certificate: %v", err)
+				}
+			}
+		}
 	}
-
-	domain, err := utils.CleanDomain(domain)
-	if err != nil {
-		http.Error(w, "Invalid domain: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Get certificate information
-	certInfo, err := certificate.GetCertificateInfo(domain)
-	if err != nil {
-		http.Error(w, "Error getting certificate: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Get certificate chain
-	chain, _ := certificate.GetCertificateChain(domain)
-
-	// Get HPKP information
-	hpkpInfo, _ := hpkp.CheckHPKP(domain)
-
-	// Get DNS information
-	dnsInfo, _ := dns.GetDNSInfo(domain)
 
 	// Create template data
 	data := struct {
-		Domain      string
-		Certificate *certificate.CertificateInfo
-		Chain       []*certificate.CertificateInfo
-		HPKP        *hpkp.HPKPInfo
-		DNS         *dns.DNSInfo
-		Title       string
+		Domain            string
+		TargetIP          string
+		Certificate       *certificate.CertificateInfo
+		Chain            []*certificate.CertificateInfo
+		HPKP             *hpkp.HPKPInfo
+		DNS              *dns.DNSInfo
+		Title            string
+		ErrorMessage     string
+		ShowRetryWithoutIP bool
 	}{
-		Domain:      domain,
-		Certificate: certInfo,
-		Chain:       chain,
-		HPKP:        hpkpInfo,
-		DNS:         dnsInfo,
-		Title:       "Results for " + domain,
+		Domain:            domain,
+		TargetIP:          targetIP,
+		Certificate:       certInfo,
+		Title:            "Results for " + domain,
+		ErrorMessage:      errorMessage,
+		ShowRetryWithoutIP: showRetryWithoutIP,
+	}
+
+	// Only fetch additional info if we have a valid certificate
+	if certInfo != nil && err == nil {
+		// Get certificate chain
+		data.Chain, _ = certificate.GetCertificateChain(domain)
+		// Get HPKP information
+		data.HPKP, _ = hpkp.CheckHPKP(domain)
+		// Get DNS information
+		data.DNS, _ = dns.GetDNSInfo(domain)
 	}
 
 	// Create template functions map
@@ -94,7 +108,6 @@ func HandleCheck(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := tmpl.Execute(w, data); err != nil {
-		// Log the error but don't try to write a new response
 		fmt.Printf("Template execution error: %v\n", err)
 		return
 	}

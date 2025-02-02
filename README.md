@@ -13,6 +13,7 @@ A Go tool for checking SSL certificates, certificate chains, and DNS information
 - 📌 HPKP (HTTP Public Key Pinning) checking
 - 🌐 DNS record lookup
 - 🗺️ IP geolocation information
+- 🔍 Pre-DNS certificate checking at specific IP addresses
 
 ## Installation
 
@@ -104,6 +105,23 @@ The tool accepts various input formats and will automatically clean the domain:
 ./build/ssl-toolkit http://www.example.com/path/to/page
 ./build/ssl-toolkit www.example.com:443
 ```
+
+### Check Certificate at Specific IP
+
+You can check a certificate at a specific IP address before DNS changes:
+
+```bash
+# Check certificate for example.com at IP 10.142.4.4
+./build/ssl-toolkit example.com --ip 10.142.4.4
+
+# Check in web interface
+./build/ssl-toolkit example.com --ip 10.142.4.4 --web
+```
+
+This is useful for:
+- Verifying certificates before DNS changes
+- Testing certificates on load balancers
+- Checking certificates on specific servers in a pool
 
 ## Example Output
 

@@ -26,6 +26,7 @@ func main() {
 	var debug bool
 	var createReminder bool
 	var reminderFile string
+	var targetIP string
 
 	var rootCmd = &cobra.Command{
 		Use:   "ssl-toolkit [domain]",
@@ -61,7 +62,12 @@ func main() {
 						server.SetupRoutes()
 						fmt.Printf("Server configured, starting on %s\n", "http://localhost:8080")
 						go func() {
-							browser.OpenURL(fmt.Sprintf("http://localhost:8080/check?domain=%s", domain))
+							// Add IP parameter to URL if provided
+							url := fmt.Sprintf("http://localhost:8080/check?domain=%s", domain)
+							if targetIP != "" {
+								url += fmt.Sprintf("&ip=%s", targetIP)
+							}
+							browser.OpenURL(url)
 						}()
 						if err := server.Start(":8080"); err != nil {
 							fmt.Printf("Server error: %v\n", err)
@@ -148,8 +154,15 @@ func main() {
 
 			fmt.Printf("\nChecking domain: %s\n", domain)
 
-			// Check SSL Certificate
-			certInfo, err := certificate.GetCertificateInfo(domain)
+			// Modify certificate check to use target IP if specified
+			var certInfo *certificate.CertificateInfo
+			if targetIP != "" {
+				fmt.Printf("🔍 Checking certificate at IP: %s\n", targetIP)
+				certInfo, err = certificate.GetCertificateInfoWithIP(domain, targetIP)
+			} else {
+				certInfo, err = certificate.GetCertificateInfo(domain)
+			}
+
 			if err != nil {
 				fmt.Printf("❌ Error getting certificate: %v\n", err)
 				os.Exit(1)
@@ -195,6 +208,7 @@ func main() {
 	rootCmd.Flags().BoolVarP(&debug, "debug", "v", false, "Enable verbose debug output")
 	rootCmd.Flags().BoolVarP(&createReminder, "create-reminder", "r", false, "Create an iCal reminder for certificate expiry")
 	rootCmd.Flags().StringVarP(&reminderFile, "reminder-file", "i", "", "Output file for iCal reminder (default: <domain>-cert-expiry.ics)")
+	rootCmd.Flags().StringVarP(&targetIP, "ip", "t", "", "Target IP address to check certificate against")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

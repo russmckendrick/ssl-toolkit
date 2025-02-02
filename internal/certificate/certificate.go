@@ -6,6 +6,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 	"time"
@@ -26,6 +27,8 @@ type CertificateInfo struct {
 	TrustStatus       string
 	CRLChecked        bool
 	CRLError          string
+	DNSNames          []string
+	Certificate       *x509.Certificate
 }
 
 func (c *CertificateInfo) IsValid() bool {
@@ -336,4 +339,39 @@ func ListAvailableRootCerts() ([]string, error) {
 	sort.Strings(certNames)
 	
 	return certNames, nil
+}
+
+// GetCertificateInfoWithIP retrieves certificate information for a domain at a specific IP address
+func GetCertificateInfoWithIP(domain, ip string) (*CertificateInfo, error) {
+	dialer := &net.Dialer{
+		Timeout: 10 * time.Second,
+	}
+
+	conn, err := tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(ip, "443"), &tls.Config{
+		ServerName: domain,
+		InsecureSkipVerify: true, // We need this because we're checking against an IP
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect: %v", err)
+	}
+	defer conn.Close()
+
+	// Get the peer certificates
+	certs := conn.ConnectionState().PeerCertificates
+	if len(certs) == 0 {
+		return nil, fmt.Errorf("no certificates found")
+	}
+
+	// Use the first certificate (the server's certificate)
+	cert := certs[0]
+
+	// Create and return CertificateInfo
+	return &CertificateInfo{
+		Subject:     cert.Subject,
+		Issuer:      cert.Issuer,
+		NotBefore:   cert.NotBefore,
+		NotAfter:    cert.NotAfter,
+		DNSNames:    cert.DNSNames,
+		Certificate: cert,
+	}, nil
 } 
