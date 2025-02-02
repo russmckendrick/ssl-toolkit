@@ -5,12 +5,13 @@ on:
     tags:
       - 'v*'
 
+permissions: # Set top-level default permissions
+  contents: write
+  packages: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      packages: write
     steps:
       - uses: actions/checkout@v4
 
@@ -51,22 +52,20 @@ jobs:
 
       - name: Clone and setup homebrew-tap
         run: |
-          git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository_owner }}/homebrew-tap.git || (
+          git clone https://${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/${{ github.repository_owner }}/homebrew-tap.git || (
             mkdir homebrew-tap
             cd homebrew-tap
             git init
-            git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository_owner }}/homebrew-tap.git
+            git remote add origin https://${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/${{ github.repository_owner }}/homebrew-tap.git
             git checkout -b main
             echo "# Homebrew Tap" > README.md
             mkdir -p Formula
             git add README.md
-            git config user.name github-actions[bot]
-            git config user.email github-actions[bot]@users.noreply.github.com
+            git config user.name "GitHub Action"
+            git config user.email "action@github.com"
             git commit -m "Initial commit"
             git push -u origin main
           )
-        env:
-          GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
       - name: Update Homebrew formula
         run: |
@@ -107,10 +106,8 @@ jobs:
           end
           EOF
 
-          git config user.name github-actions[bot]
-          git config user.email github-actions[bot]@users.noreply.github.com
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
           git add Formula/ssl-toolkit.rb
           git commit -m "Update ssl-toolkit to ${VERSION}"
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }} 
+          git push 
