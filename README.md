@@ -14,11 +14,21 @@ A Go tool for checking SSL certificates, certificate chains, and DNS information
 - 🌐 DNS record lookup
 - 🗺️ IP geolocation information
 
-## Requirements
-
-- Go 1.21 or higher
-
 ## Installation
+
+### Homebrew (macOS)
+
+The easiest way to install on macOS is via Homebrew:
+
+```bash
+# Add the tap
+brew tap russmckendrick/tap
+
+# Install ssl-toolkit
+brew install ssl-toolkit
+```
+
+### Manual Installation
 
 1. Clone the repository:
 ```bash
