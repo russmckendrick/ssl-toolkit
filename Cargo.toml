@@ -36,6 +36,8 @@ console = "0.15"
 dialoguer = "0.11"
 tabled = { version = "0.16", features = ["ansi"] }
 textwrap = "0.16"
+ratatui = "0.29"
+crossterm = "0.28"
 
 # Serialization and output
 serde = { version = "1", features = ["derive"] }

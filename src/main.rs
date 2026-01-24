@@ -16,6 +16,7 @@ mod dns;
 mod error;
 mod hpkp;
 mod output;
+mod tui;
 mod utils;
 
 use clap::Parser;
