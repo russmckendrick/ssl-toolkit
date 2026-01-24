@@ -1,195 +1,249 @@
-# SSL Certificate Toolkit 🔒
+# SSL Toolkit
 
-A Go tool for checking SSL certificates, certificate chains, and DNS information for domains.
+A comprehensive SSL/TLS certificate analysis toolkit written in Rust.
 
 ## Features
 
-- 🔒 SSL Certificate validation
-- 🔗 Full certificate chain analysis
-- ⚠️ Trust status verification
-- 📅 Expiration checking
-- 📅 Certificate expiry reminders (iCal format)
-- 🚫 Revocation checking
-- 📌 HPKP (HTTP Public Key Pinning) checking
-- 🌐 DNS record lookup
-- 🗺️ IP geolocation information
-- 🔍 Pre-DNS certificate checking at specific IP addresses
+- **Certificate Analysis**
+  - SSL/TLS certificate validation
+  - Full certificate chain analysis
+  - Trust status verification
+  - Expiration checking with countdown
+  - Security grading (A+ to F)
+  - Certificate fingerprints (SHA-256)
+
+- **Security Checks**
+  - OCSP status checking
+  - Certificate Transparency log search
+  - HSTS header detection
+  - DANE/TLSA record generation
+  - Key size and algorithm analysis
+
+- **DNS Analysis**
+  - A, AAAA, MX, NS, TXT, SOA records
+  - Nameserver consistency checking
+  - CAA record detection
+  - SPF, DMARC, BIMI record analysis
+  - IP geolocation
+
+- **Output Formats**
+  - Rich terminal output with colors and tables
+  - JSON export
+  - Markdown reports
+  - HTML reports
+
+- **Additional Features**
+  - Batch processing of multiple domains
+  - Watch mode for monitoring certificates
+  - Certificate comparison (diff)
+  - iCal expiry reminders
+  - Interactive mode
 
 ## Installation
 
-### Homebrew (macOS)
+### From Source (Rust)
 
-The easiest way to install on macOS is via Homebrew:
+1. Ensure you have Rust installed (https://rustup.rs)
 
+2. Clone the repository:
 ```bash
-# Add the tap
-brew tap russmckendrick/tap
-
-# Install ssl-toolkit
-brew install ssl-toolkit
-```
-
-### Manual Installation
-
-1. Clone the repository:
-```bash
-git clone git@github.com:russmckendrick/ssl-toolkit.git
+git clone https://github.com/russmckendrick/ssl-toolkit.git
 cd ssl-toolkit
-```
-
-2. Install dependencies:
-```bash
-make deps
 ```
 
 3. Build the application:
 ```bash
-make build
+cargo build --release
+```
+
+4. The binary will be at `target/release/ssl-toolkit`
+
+### Homebrew (macOS)
+
+```bash
+brew tap russmckendrick/tap
+brew install ssl-toolkit
 ```
 
 ## Usage
 
-You can run the application in several ways:
-
-1. Using make:
-```bash
-make run
-```
-
-2. Direct execution after building:
-```bash
-./build/ssl-toolkit example.com
-```
-
-3. Or build and run in one step:
-```bash
-go run cmd/ssl-toolkit/main.go example.com
-```
-
-### Additional Commands
-
-#### Download Certificate Chain
-```bash
-# Save chain to default file (<domain>-chain.pem)
-./build/ssl-toolkit example.com --download-chain
-
-# Specify output file
-./build/ssl-toolkit example.com --download-chain --output mycerts.pem
-```
-
-#### Create Certificate Expiry Reminder
-```bash
-# Create reminder (saves to <domain>-cert-expiry.ics)
-./build/ssl-toolkit example.com --create-reminder
-
-# Specify output file
-./build/ssl-toolkit example.com --create-reminder --reminder-file myreminder.ics
-```
-The reminder will be set for 30 days before the certificate expires and includes:
-- Calendar event with expiry details
-- Additional 7-day warning alarm
-- Description with renewal instructions
-
-#### List Available Root Certificates
-```bash
-./build/ssl-toolkit --list-certs
-```
-This command displays all root certificates available in your system's trust store.
-
-The tool accepts various input formats and will automatically clean the domain:
-
-```bash
-# All these formats work:
-./build/ssl-toolkit www.example.com
-./build/ssl-toolkit https://www.example.com
-./build/ssl-toolkit http://www.example.com/path/to/page
-./build/ssl-toolkit www.example.com:443
-```
-
-### Check Certificate at Specific IP
-
-You can check a certificate at a specific IP address before DNS changes:
-
-```bash
-# Check certificate for example.com at IP 10.142.4.4
-./build/ssl-toolkit example.com --ip 10.142.4.4
-
-# Check in web interface
-./build/ssl-toolkit example.com --ip 10.142.4.4 --web
-```
-
-This is useful for:
-- Verifying certificates before DNS changes
-- Testing certificates on load balancers
-- Checking certificates on specific servers in a pool
-
-## Example Output
-
 ### Basic Certificate Check
-```
-=== 🔒 SSL Certificate Information ===
-🏢 Issuer: WE1
-📅 Valid From: 2024-12-19 13:25:09 UTC
-📅 Valid Until: 2025-03-19 14:25:02 UTC
-✅ Certificate Status: Valid and Trusted
-✅ Trust Status: Certificate chain is trusted
 
-=== 📌 HPKP Information ===
-❌ HPKP is not enabled
+```bash
+# Check a domain
+ssl-toolkit example.com
 
-=== 🔗 Certificate Chain ===
-...
-```
+# With verbose output
+ssl-toolkit example.com --verbose
 
-### List Certificates Output
-```
-📜 Found 132 Available Root Certificates:
+# Check at specific IP (useful before DNS changes)
+ssl-toolkit example.com --ip 192.168.1.100
 
-- GlobalSign Root CA
-- DigiCert Global Root CA
-- Let's Encrypt Root X1
-...
+# Custom port
+ssl-toolkit example.com --port 8443
 ```
 
-### Create Reminder Output
+### Output Formats
+
+```bash
+# JSON output
+ssl-toolkit example.com --format json
+
+# Markdown report
+ssl-toolkit example.com --format markdown
+
+# HTML report (saves to file)
+ssl-toolkit example.com --format html
 ```
-✅ Certificate expiry reminder saved to example.com-cert-expiry.ics
-📅 Reminder set for 30 days before expiry (2025-02-17)
+
+### Focused Views
+
+```bash
+# Show security grade only
+ssl-toolkit example.com --grade
+
+# Show certificate chain only
+ssl-toolkit example.com --chain
+
+# Show DNS information only
+ssl-toolkit example.com --dns
 ```
 
-## Certificate Status Types
+### Batch Operations
 
-The tool checks for various certificate issues:
+```bash
+# Check multiple domains from file
+ssl-toolkit batch domains.txt
 
-- ✅ Valid and Trusted: Certificate is valid and trusted by system roots
-- 🚫 Revoked: Certificate has been revoked by the issuer
-- ⚠️ Untrusted Root: Certificate chain contains an untrusted root certificate
-- 📛 Expired: Certificate has expired
-- ❌ Invalid: Certificate failed validation
+# Parallel checking (5 at a time)
+ssl-toolkit batch domains.txt --parallel 5
 
-## Troubleshooting
+# Only show domains with issues
+ssl-toolkit batch domains.txt --issues-only
+```
 
-### Common Issues
+### Watch Mode
 
-1. **Trust Status Shows Invalid but Certificate is Valid**
-   - This can happen when the system's root certificate store is outdated
-   - Or when intermediate certificates are not properly chained
-   - Try updating your system's CA certificates
+```bash
+# Monitor certificate (check every 5 minutes)
+ssl-toolkit watch example.com --interval 300
 
-2. **CRL Verification Unavailable**
-   - This is a warning, not an error
-   - Indicates that the Certificate Revocation List couldn't be checked
-   - Certificate may still be valid and trusted
+# Alert on certificate change
+ssl-toolkit watch example.com --alert-on-change
 
-3. **HPKP Not Enabled**
-   - This is informational only
-   - Many sites don't use HPKP as it's being deprecated in favor of other security measures
+# Alert when expiring within N days
+ssl-toolkit watch example.com --alert-expiry-days 30
+```
+
+### Certificate Comparison
+
+```bash
+# Compare two domains
+ssl-toolkit diff example.com other.com
+
+# Compare same domain at different IPs
+ssl-toolkit diff example.com --ip 192.168.1.100
+```
+
+### Certificate Transparency Search
+
+```bash
+# Search CT logs for domain
+ssl-toolkit ct-search example.com
+
+# Include expired certificates
+ssl-toolkit ct-search example.com --include-expired
+
+# Filter by issuer
+ssl-toolkit ct-search example.com --issuer "Let's Encrypt"
+```
+
+### TLSA Record Generation
+
+```bash
+# Generate DANE/TLSA record
+ssl-toolkit tlsa example.com
+
+# Custom parameters
+ssl-toolkit tlsa example.com --usage 3 --selector 1 --matching-type 1
+```
+
+### Certificate Download & Reminders
+
+```bash
+# Download certificate chain as PEM
+ssl-toolkit example.com --download-chain
+
+# Create iCal expiry reminder
+ssl-toolkit example.com --create-reminder
+
+# Custom reminder days before expiry
+ssl-toolkit example.com --create-reminder --reminder-days 14
+```
+
+### Interactive Mode
+
+```bash
+ssl-toolkit --interactive
+```
+
+## Security Grading
+
+The security grade is calculated based on:
+
+| Factor | Max Points | Description |
+|--------|------------|-------------|
+| Key Size | 20 | RSA 4096+, ECDSA P-384+ = excellent |
+| Signature Algorithm | 15 | SHA-256+ required, SHA-1 = fail |
+| Certificate Validity | 15 | Valid, trusted certificate |
+| Certificate Chain | 10 | Complete chain with trusted root |
+| OCSP Status | 10 | Good status, stapling bonus |
+| Certificate Transparency | 10 | Logged in CT |
+| HSTS | 10 | Strict-Transport-Security header |
+| CAA Records | 5 | DNS CAA records configured |
+| Expiry Warning | 5 | Days until expiry |
+
+**Grades:**
+- **A+**: Score 95-100%
+- **A**: Score 85-94%
+- **B**: Score 75-84%
+- **C**: Score 65-74%
+- **D**: Score 50-64%
+- **F**: Score below 50% or critical failures
 
 ## Development
 
-- Build the application: `make build`
-- Run tests: `make test`
-- Clean build artifacts: `make clean`
+### Building
+
+```bash
+# Debug build
+cargo build
+
+# Release build
+cargo build --release
+
+# Run tests
+cargo test
+
+# Run with logging
+RUST_LOG=debug cargo run -- example.com
+```
+
+### Project Structure
+
+```
+src/
+├── main.rs           # Entry point
+├── cli/              # CLI argument parsing
+├── certificate/      # Certificate handling
+├── dns/              # DNS resolution
+├── ct/               # Certificate Transparency
+├── hpkp/             # HSTS checking
+├── output/           # Output formatters
+├── commands/         # Command implementations
+├── utils/            # Utilities
+└── error.rs          # Error types
+```
 
 ## Contributing
 
