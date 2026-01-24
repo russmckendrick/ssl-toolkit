@@ -12,6 +12,16 @@ use tabled::{
     Table, Tabled,
 };
 
+/// Pad a styled string to a visual width, accounting for ANSI escape codes
+fn pad_to_visual_width(styled: &str, target_width: usize) -> String {
+    let visual_width = console::measure_text_width(styled);
+    if visual_width >= target_width {
+        styled.to_string()
+    } else {
+        format!("{}{}", styled, " ".repeat(target_width - visual_width))
+    }
+}
+
 /// Create a spinner for long-running operations
 pub fn create_spinner(message: &str) -> ProgressBar {
     let pb = ProgressBar::new_spinner();
@@ -216,20 +226,13 @@ pub fn print_security_grade(grade: &SecurityGrade) {
         grade.grade.to_string()
     };
 
-    println!(
-        "  ┌───────────────────┐"
-    );
-    println!(
-        "  │  Grade: {}        │",
-        grade_style.apply_to(&grade_display)
-    );
-    println!(
-        "  │  Score: {:>3}%     │",
-        grade.score
-    );
-    println!(
-        "  └───────────────────┘"
-    );
+    let grade_styled = grade_style.apply_to(&grade_display).to_string();
+    let grade_padded = pad_to_visual_width(&grade_styled, 10);
+
+    println!("  ┌───────────────────┐");
+    println!("  │  Grade: {}│", grade_padded);
+    println!("  │  Score: {:>3}%     │", grade.score);
+    println!("  └───────────────────┘");
 
     println!();
     println!("{}", style("Grade Factors:").bold());

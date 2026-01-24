@@ -209,13 +209,18 @@ async fn run() -> Result<()> {
         .await;
     }
 
-    // No command or domain provided - show help
+    // No command or domain provided - launch interactive mode if in TTY
+    if console::Term::stdout().is_term() {
+        let mut session = InteractiveSession::new();
+        return session.run().await;
+    }
+
+    // Non-TTY: show help
     println!("{}", style("SSL Toolkit").cyan().bold());
     println!("A comprehensive SSL/TLS certificate analysis tool\n");
     println!("Usage: ssl-toolkit [OPTIONS] [DOMAIN]");
     println!("       ssl-toolkit <COMMAND>\n");
     println!("Run 'ssl-toolkit --help' for more information.");
-    println!("Run 'ssl-toolkit --interactive' for interactive mode.");
 
     Ok(())
 }
