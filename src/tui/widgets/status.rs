@@ -18,6 +18,10 @@ pub enum StatusMode {
     ResultsContent,   // Focus on content panel
     Settings,
     Error,
+    SaveMenu,         // Save menu overlay
+    SavePath,         // Save path input
+    Saving,           // Saving in progress
+    SaveComplete,     // Save completed
 }
 
 /// Status bar widget showing context-sensitive help
@@ -57,6 +61,7 @@ impl StatusBar {
             StatusMode::ResultsSections => vec![
                 ("↑↓", "Section"),
                 ("→", "View content"),
+                ("s", "Save"),
                 ("Esc", "Back"),
                 ("q", "Quit"),
             ],
@@ -64,8 +69,8 @@ impl StatusBar {
                 ("↑↓", "Scroll"),
                 ("←", "Sections"),
                 ("Tab", "Next section"),
+                ("s", "Save"),
                 ("Esc", "Back"),
-                ("q", "Quit"),
             ],
             StatusMode::Settings => vec![
                 ("↑↓", "Navigate"),
@@ -74,6 +79,23 @@ impl StatusBar {
             ],
             StatusMode::Error => vec![
                 ("Enter", "Dismiss"),
+                ("Esc", "Back"),
+            ],
+            StatusMode::SaveMenu => vec![
+                ("↑↓", "Navigate"),
+                ("Enter", "Select"),
+                ("Esc", "Cancel"),
+            ],
+            StatusMode::SavePath => vec![
+                ("Enter", "Save"),
+                ("Esc", "Cancel"),
+                ("←→", "Move cursor"),
+            ],
+            StatusMode::Saving => vec![
+                ("", "Saving..."),
+            ],
+            StatusMode::SaveComplete => vec![
+                ("Enter", "Continue"),
                 ("Esc", "Back"),
             ],
         }

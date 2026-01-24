@@ -65,6 +65,20 @@ url = "2"
 ipnetwork = "0.20"
 futures = "0.3"
 
+# PDF generation
+genpdf = "0.2"
+
+# SVG rendering for logo
+resvg = "0.42"
+usvg = "0.42"
+tiny-skia = "0.11"
+
+# Image handling for PDF
+image = "0.25"
+
+# UUID for iCal
+uuid = { version = "1", features = ["v4"] }
+
 [dev-dependencies]
 tokio-test = "0.4"
 

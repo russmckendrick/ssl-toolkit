@@ -4,12 +4,14 @@ use crate::certificate::{self, CertificateChain, SecurityGrade};
 use crate::cli::args::OutputFormat;
 use crate::dns::{self, DnsInfo};
 use crate::error::{Result, SslToolkitError};
+use crate::export::{self, ExportResult, ExportType};
 use crate::hpkp;
 use crate::tui::events::{AppEvent, CheckData, CheckResult, EventHandler, KeyAction};
 use crate::tui::widgets::{
     input::InputState,
     menu::{MenuItem, MenuState},
     results::{ResultsData, ResultsState},
+    save_menu::{SaveMenuState, SaveOption, SavePathState, SavingState},
     status::LoadingSpinner,
 };
 use crossterm::{
@@ -43,6 +45,14 @@ pub enum AppState {
     Settings,
     /// Error display
     Error(String),
+    /// Save menu overlay
+    SaveMenu,
+    /// Input for save path
+    SavePath,
+    /// Saving in progress
+    Saving,
+    /// Save completed
+    SaveComplete(Vec<ExportResult>),
     /// Exiting
     Quit,
 }
@@ -81,6 +91,11 @@ pub struct App {
     pub current_domain: String,
     pub current_port: u16,
 
+    // Save/export state
+    pub save_menu: SaveMenuState,
+    pub save_path: Option<SavePathState>,
+    pub saving_state: Option<SavingState>,
+
     // Should quit
     pub should_quit: bool,
 }
@@ -111,6 +126,9 @@ impl Default for App {
             loading_message: String::new(),
             current_domain: String::new(),
             current_port: 443,
+            save_menu: SaveMenuState::new(),
+            save_path: None,
+            saving_state: None,
             should_quit: false,
         }
     }
@@ -129,6 +147,7 @@ impl App {
                 | AppState::InputPort
                 | AppState::InputFile
                 | AppState::InputSecondDomain
+                | AppState::SavePath
         )
     }
 
@@ -141,9 +160,13 @@ impl App {
             AppState::InputFile => self.handle_file_input_key(action, event_tx),
             AppState::InputSecondDomain => self.handle_second_domain_key(action, event_tx),
             AppState::Checking => self.handle_loading_key(action),
-            AppState::Results => self.handle_results_key(action),
+            AppState::Results => self.handle_results_key(action, event_tx),
             AppState::Settings => self.handle_settings_key(action),
             AppState::Error(_) => self.handle_error_key(action),
+            AppState::SaveMenu => self.handle_save_menu_key(action, event_tx),
+            AppState::SavePath => self.handle_save_path_key(action, event_tx),
+            AppState::Saving => {} // No key handling during save
+            AppState::SaveComplete(_) => self.handle_save_complete_key(action),
             AppState::Quit => {}
         }
     }
@@ -333,7 +356,7 @@ impl App {
         }
     }
 
-    fn handle_results_key(&mut self, action: KeyAction) {
+    fn handle_results_key(&mut self, action: KeyAction, _event_tx: &mpsc::UnboundedSender<AppEvent>) {
         use crate::tui::widgets::results::ResultsFocus;
 
         match action {
@@ -343,6 +366,11 @@ impl App {
             }
             KeyAction::Back => {
                 self.state = AppState::MainMenu;
+            }
+            // 's' key opens save menu
+            KeyAction::Char('s') => {
+                self.save_menu = SaveMenuState::new();
+                self.state = AppState::SaveMenu;
             }
             // Left/Right switches focus between panels
             KeyAction::Left => {
@@ -444,6 +472,113 @@ impl App {
         if matches!(action, KeyAction::Enter | KeyAction::Back) {
             self.state = AppState::MainMenu;
         }
+    }
+
+    fn handle_save_menu_key(&mut self, action: KeyAction, event_tx: &mpsc::UnboundedSender<AppEvent>) {
+        match action {
+            KeyAction::Back => {
+                self.state = AppState::Results;
+            }
+            KeyAction::Up => {
+                self.save_menu.previous();
+            }
+            KeyAction::Down => {
+                self.save_menu.next();
+            }
+            KeyAction::Enter => {
+                let selected = self.save_menu.selected();
+                match selected {
+                    SaveOption::Cancel => {
+                        self.state = AppState::Results;
+                    }
+                    _ => {
+                        // Show save path input
+                        self.save_path = Some(SavePathState::new(selected, &self.current_domain));
+                        self.state = AppState::SavePath;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_save_path_key(&mut self, action: KeyAction, event_tx: &mpsc::UnboundedSender<AppEvent>) {
+        if let Some(ref mut path_state) = self.save_path {
+            match action {
+                KeyAction::Back => {
+                    self.save_path = None;
+                    self.state = AppState::SaveMenu;
+                }
+                KeyAction::Enter => {
+                    // Validate path and start export
+                    let path = std::path::Path::new(&path_state.path);
+                    if !path.exists() {
+                        path_state.set_error("Directory does not exist");
+                        return;
+                    }
+                    if !path.is_dir() {
+                        path_state.set_error("Path is not a directory");
+                        return;
+                    }
+
+                    // Start export
+                    self.start_export(event_tx);
+                }
+                KeyAction::Char(c) => path_state.insert(c),
+                KeyAction::Backspace => path_state.delete_backward(),
+                KeyAction::Delete => path_state.delete_forward(),
+                KeyAction::Left => path_state.move_left(),
+                KeyAction::Right => path_state.move_right(),
+                KeyAction::Home => path_state.move_home(),
+                KeyAction::End => path_state.move_end(),
+                _ => {}
+            }
+        }
+    }
+
+    fn handle_save_complete_key(&mut self, action: KeyAction) {
+        if matches!(action, KeyAction::Enter | KeyAction::Back) {
+            self.state = AppState::Results;
+        }
+    }
+
+    fn start_export(&mut self, event_tx: &mpsc::UnboundedSender<AppEvent>) {
+        if let (Some(ref path_state), Some(ref data)) = (&self.save_path, &self.results_data) {
+            let save_option = path_state.save_option;
+            let base_path = std::path::PathBuf::from(&path_state.path);
+            let data_clone = data.clone();
+            let tx = event_tx.clone();
+
+            self.saving_state = Some(SavingState::new("Exporting..."));
+            self.state = AppState::Saving;
+
+            tokio::spawn(async move {
+                let results = match save_option {
+                    SaveOption::PdfReport => {
+                        vec![export::export_single(&data_clone, &base_path, ExportType::Pdf)]
+                    }
+                    SaveOption::CertificateChain => {
+                        vec![export::export_single(&data_clone, &base_path, ExportType::Pem)]
+                    }
+                    SaveOption::CalendarReminder => {
+                        vec![export::export_single(&data_clone, &base_path, ExportType::ICal)]
+                    }
+                    SaveOption::SaveAll => {
+                        export::export_all(&data_clone, &base_path)
+                    }
+                    SaveOption::Cancel => vec![],
+                };
+
+                let _ = tx.send(AppEvent::ExportComplete(results));
+            });
+        }
+    }
+
+    /// Handle export completion
+    pub fn handle_export_complete(&mut self, results: Vec<ExportResult>) {
+        self.saving_state = None;
+        self.save_path = None;
+        self.state = AppState::SaveComplete(results);
     }
 
     fn start_check(&mut self, event_tx: &mpsc::UnboundedSender<AppEvent>) {
@@ -610,6 +745,9 @@ impl TuiRunner {
                     }
                     AppEvent::CheckComplete(result) => {
                         self.app.handle_check_complete(*result);
+                    }
+                    AppEvent::ExportComplete(results) => {
+                        self.app.handle_export_complete(results);
                     }
                     AppEvent::Error(msg) => {
                         self.app.state = AppState::Error(msg);

@@ -1,5 +1,6 @@
 //! Event handling for TUI
 
+use crate::export::ExportResult;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -13,6 +14,8 @@ pub enum AppEvent {
     Tick,
     /// Async operation completed
     CheckComplete(Box<CheckResult>),
+    /// Export operation completed
+    ExportComplete(Vec<ExportResult>),
     /// Error occurred
     Error(String),
     /// Resize event

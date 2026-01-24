@@ -44,6 +44,12 @@ pub enum SslToolkitError {
     #[error("Configuration error: {0}")]
     Config(String),
 
+    #[error("Export error: {0}")]
+    Export(String),
+
+    #[error("PDF generation error: {0}")]
+    PdfGeneration(String),
+
     #[error("{0}")]
     Other(String),
 }

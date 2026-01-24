@@ -1,10 +1,12 @@
 //! Main UI rendering
 
+use crate::export::ExportResult;
 use crate::tui::app::{App, AppState};
 use crate::tui::widgets::{
     input::{render_input, InputDialog},
     menu::MenuWidget,
     results::ResultsWidget,
+    save_menu::{render_save_menu, render_save_path_dialog, render_saving_overlay},
     status::{HeaderBar, LoadingSpinner, StatusBar, StatusMode},
 };
 use ratatui::{
@@ -53,6 +55,12 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         None
     };
 
+    let save_complete_results = if let AppState::SaveComplete(ref results) = app.state {
+        Some(results.clone())
+    } else {
+        None
+    };
+
     // Clone input states for dialogs
     let domain_input = app.domain_input.clone();
     let port_input = app.port_input.clone();
@@ -95,6 +103,28 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 render_error_dialog(f, size, &msg);
             }
         }
+        AppState::SaveMenu => {
+            render_results(f, chunks[1], app);
+            render_save_menu(size, f.buffer_mut(), &app.save_menu);
+        }
+        AppState::SavePath => {
+            render_results(f, chunks[1], app);
+            if let Some(ref path_state) = app.save_path {
+                render_save_path_dialog(size, f.buffer_mut(), path_state);
+            }
+        }
+        AppState::Saving => {
+            render_results(f, chunks[1], app);
+            if let Some(ref saving_state) = app.saving_state {
+                render_saving_overlay(size, f.buffer_mut(), saving_state);
+            }
+        }
+        AppState::SaveComplete(_) => {
+            render_results(f, chunks[1], app);
+            if let Some(results) = save_complete_results {
+                render_save_complete_dialog(f, size, &results);
+            }
+        }
         AppState::Quit => {}
     }
 
@@ -114,6 +144,10 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         }
         AppState::Settings => StatusMode::Settings,
         AppState::Error(_) => StatusMode::Error,
+        AppState::SaveMenu => StatusMode::SaveMenu,
+        AppState::SavePath => StatusMode::SavePath,
+        AppState::Saving => StatusMode::Saving,
+        AppState::SaveComplete(_) => StatusMode::SaveComplete,
         AppState::Quit => StatusMode::Menu,
     };
 
@@ -293,6 +327,86 @@ fn render_error_dialog(f: &mut Frame, area: Rect, message: &str) {
             ),
         ]),
     ];
+
+    let paragraph = Paragraph::new(text).wrap(Wrap { trim: false });
+
+    f.render_widget(block, dialog_area);
+    f.render_widget(paragraph, inner);
+}
+
+fn render_save_complete_dialog(f: &mut Frame, area: Rect, results: &[ExportResult]) {
+    let success_count = results.iter().filter(|r| r.success).count();
+    let fail_count = results.len() - success_count;
+
+    let dialog_height = (6 + results.len() * 2) as u16;
+    let dialog_width = 60.min(area.width.saturating_sub(4));
+    let dialog_height = dialog_height.min(area.height.saturating_sub(4));
+
+    let x = (area.width.saturating_sub(dialog_width)) / 2;
+    let y = (area.height.saturating_sub(dialog_height)) / 2;
+
+    let dialog_area = Rect::new(x, y, dialog_width, dialog_height);
+
+    f.render_widget(Clear, dialog_area);
+
+    let (title, border_color) = if fail_count == 0 {
+        (" Export Complete ", Color::Green)
+    } else if success_count == 0 {
+        (" Export Failed ", Color::Red)
+    } else {
+        (" Export Partial ", Color::Yellow)
+    };
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(border_color))
+        .title(title)
+        .title_style(Style::default().fg(border_color).add_modifier(Modifier::BOLD));
+
+    let inner = block.inner(dialog_area);
+
+    let mut text = vec![Line::from("")];
+
+    for result in results {
+        let (icon, color) = if result.success {
+            ("✓", Color::Green)
+        } else {
+            ("✗", Color::Red)
+        };
+
+        text.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(icon, Style::default().fg(color)),
+            Span::raw(" "),
+            Span::styled(result.export_type.label(), Style::default().add_modifier(Modifier::BOLD)),
+        ]));
+
+        if result.success {
+            // Truncate path if too long
+            let path = if result.path.len() > 45 {
+                format!("...{}", &result.path[result.path.len() - 42..])
+            } else {
+                result.path.clone()
+            };
+            text.push(Line::from(vec![
+                Span::raw("    "),
+                Span::styled(path, Style::default().fg(Color::DarkGray)),
+            ]));
+        } else if let Some(ref error) = result.error {
+            text.push(Line::from(vec![
+                Span::raw("    "),
+                Span::styled(error.clone(), Style::default().fg(Color::Red)),
+            ]));
+        }
+    }
+
+    text.push(Line::from(""));
+    text.push(Line::from(vec![
+        Span::styled(
+            "  Press Enter or Esc to continue",
+            Style::default().fg(Color::DarkGray),
+        ),
+    ]));
 
     let paragraph = Paragraph::new(text).wrap(Wrap { trim: false });
 
