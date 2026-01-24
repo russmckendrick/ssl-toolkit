@@ -95,12 +95,6 @@ pub enum Commands {
     /// Check SSL certificate for a domain
     Check(CheckArgs),
 
-    /// Check multiple domains from a file
-    Batch(BatchArgs),
-
-    /// Monitor certificate for changes
-    Watch(WatchArgs),
-
     /// Compare two certificates
     Diff(DiffArgs),
 
@@ -160,59 +154,6 @@ pub struct CheckArgs {
     pub reminder_days: i64,
 }
 
-#[derive(Args)]
-pub struct BatchArgs {
-    /// File containing domains (one per line)
-    #[arg(required = true)]
-    pub file: PathBuf,
-
-    /// Number of parallel checks
-    #[arg(short, long, default_value = "5")]
-    pub parallel: usize,
-
-    /// Connection timeout in seconds
-    #[arg(long, default_value = "10")]
-    pub timeout: u64,
-
-    /// Skip DNS information lookup
-    #[arg(long)]
-    pub skip_dns: bool,
-
-    /// Skip CT log lookup
-    #[arg(long)]
-    pub skip_ct: bool,
-
-    /// Skip OCSP checking
-    #[arg(long)]
-    pub skip_ocsp: bool,
-
-    /// Only show domains with issues
-    #[arg(long)]
-    pub issues_only: bool,
-}
-
-#[derive(Args)]
-pub struct WatchArgs {
-    /// Domain to watch
-    #[arg(required = true)]
-    pub domain: String,
-
-    /// Check interval in seconds
-    #[arg(short, long, default_value = "300")]
-    pub interval: u64,
-
-    /// Number of checks (0 = infinite)
-    #[arg(short, long, default_value = "0")]
-    pub count: u64,
-
-    /// Alert on certificate change
-    #[arg(long)]
-    pub alert_on_change: bool,
-
-    /// Alert when expiry is within days
-    #[arg(long)]
-    pub alert_expiry_days: Option<i64>,
-}
 
 #[derive(Args)]
 pub struct DiffArgs {

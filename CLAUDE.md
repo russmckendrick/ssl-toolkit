@@ -41,7 +41,7 @@ SSL Toolkit is an async Rust CLI for SSL/TLS certificate analysis, built on toki
 - **`dns/`** - DNS resolution using hickory-resolver:
   - `resolver.rs` - Multi-record type resolution (A, AAAA, MX, NS, TXT, CAA, etc.)
   - `tlsa.rs` - DANE/TLSA record generation and validation
-- **`commands/`** - Command implementations (check, batch, watch, diff, ct_search, tlsa)
+- **`commands/`** - Command implementations (check, diff, ct_search, tlsa)
 - **`output/`** - Format-specific renderers (terminal, JSON, Markdown, HTML)
 - **`tui/`** - Full-screen ratatui dashboard:
   - `app.rs` - Application state, event loop, async task handling

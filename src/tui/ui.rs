@@ -64,7 +64,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     // Clone input states for dialogs
     let domain_input = app.domain_input.clone();
     let port_input = app.port_input.clone();
-    let file_input = app.file_input.clone();
     let second_domain_input = app.second_domain_input.clone();
 
     // Render content based on state
@@ -79,10 +78,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         AppState::InputPort => {
             render_main_menu(f, chunks[1], app);
             render_input_dialog(f, size, &port_input);
-        }
-        AppState::InputFile => {
-            render_main_menu(f, chunks[1], app);
-            render_input_dialog(f, size, &file_input);
         }
         AppState::InputSecondDomain => {
             render_main_menu(f, chunks[1], app);
@@ -131,7 +126,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     // Render status bar
     let status_mode = match app.state {
         AppState::MainMenu => StatusMode::Menu,
-        AppState::InputDomain | AppState::InputPort | AppState::InputFile | AppState::InputSecondDomain => {
+        AppState::InputDomain | AppState::InputPort | AppState::InputSecondDomain => {
             StatusMode::Input
         }
         AppState::Checking => StatusMode::Loading,

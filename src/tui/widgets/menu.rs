@@ -12,8 +12,6 @@ use ratatui::{
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MenuItem {
     CheckDomain,
-    BatchCheck,
-    WatchDomain,
     CompareCertificates,
     SearchCtLogs,
     GenerateTlsa,
@@ -25,8 +23,6 @@ impl MenuItem {
     pub fn all() -> Vec<MenuItem> {
         vec![
             MenuItem::CheckDomain,
-            MenuItem::BatchCheck,
-            MenuItem::WatchDomain,
             MenuItem::CompareCertificates,
             MenuItem::SearchCtLogs,
             MenuItem::GenerateTlsa,
@@ -38,8 +34,6 @@ impl MenuItem {
     pub fn label(&self) -> &'static str {
         match self {
             MenuItem::CheckDomain => "Check SSL certificate for a domain",
-            MenuItem::BatchCheck => "Batch check multiple domains",
-            MenuItem::WatchDomain => "Watch a domain for certificate changes",
             MenuItem::CompareCertificates => "Compare two certificates",
             MenuItem::SearchCtLogs => "Search Certificate Transparency logs",
             MenuItem::GenerateTlsa => "Generate TLSA/DANE record",
@@ -51,8 +45,6 @@ impl MenuItem {
     pub fn icon(&self) -> &'static str {
         match self {
             MenuItem::CheckDomain => "🔒",
-            MenuItem::BatchCheck => "📋",
-            MenuItem::WatchDomain => "👁",
             MenuItem::CompareCertificates => "⚖",
             MenuItem::SearchCtLogs => "🔍",
             MenuItem::GenerateTlsa => "📝",

@@ -33,8 +33,6 @@ A comprehensive SSL/TLS certificate analysis toolkit written in Rust.
   - HTML reports
 
 - **Additional Features**
-  - Batch processing of multiple domains
-  - Watch mode for monitoring certificates
   - Certificate comparison (diff)
   - iCal expiry reminders
   - Interactive mode
@@ -107,32 +105,6 @@ ssl-toolkit example.com --chain
 
 # Show DNS information only
 ssl-toolkit example.com --dns
-```
-
-### Batch Operations
-
-```bash
-# Check multiple domains from file
-ssl-toolkit batch domains.txt
-
-# Parallel checking (5 at a time)
-ssl-toolkit batch domains.txt --parallel 5
-
-# Only show domains with issues
-ssl-toolkit batch domains.txt --issues-only
-```
-
-### Watch Mode
-
-```bash
-# Monitor certificate (check every 5 minutes)
-ssl-toolkit watch example.com --interval 300
-
-# Alert on certificate change
-ssl-toolkit watch example.com --alert-on-change
-
-# Alert when expiring within N days
-ssl-toolkit watch example.com --alert-expiry-days 30
 ```
 
 ### Certificate Comparison

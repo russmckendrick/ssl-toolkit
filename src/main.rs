@@ -97,29 +97,6 @@ async fn run() -> Result<()> {
                     .await
                 }
             }
-            Commands::Batch(args) => {
-                commands::run_batch(
-                    &args.file,
-                    args.parallel,
-                    Duration::from_secs(args.timeout),
-                    args.skip_dns,
-                    args.skip_ct,
-                    args.skip_ocsp,
-                    args.issues_only,
-                    cli.format,
-                )
-                .await
-            }
-            Commands::Watch(args) => {
-                commands::run_watch(
-                    &args.domain,
-                    args.interval,
-                    args.count,
-                    args.alert_on_change,
-                    args.alert_expiry_days,
-                )
-                .await
-            }
             Commands::Diff(args) => {
                 commands::run_diff(
                     &args.first,

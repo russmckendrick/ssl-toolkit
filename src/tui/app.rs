@@ -33,8 +33,6 @@ pub enum AppState {
     InputDomain,
     /// Input dialog for port
     InputPort,
-    /// Input dialog for file path (batch)
-    InputFile,
     /// Input for second domain (compare)
     InputSecondDomain,
     /// Loading/checking state
@@ -68,7 +66,6 @@ pub struct App {
     // Input state
     pub domain_input: InputState,
     pub port_input: InputState,
-    pub file_input: InputState,
     pub second_domain_input: InputState,
 
     // Results state
@@ -110,8 +107,6 @@ impl Default for App {
                 .with_placeholder("example.com"),
             port_input: InputState::new("Enter port")
                 .with_default("443"),
-            file_input: InputState::new("Enter path to domains file")
-                .with_placeholder("/path/to/domains.txt"),
             second_domain_input: InputState::new("Enter second domain")
                 .with_placeholder("example.org"),
             results: ResultsState::default(),
@@ -145,7 +140,6 @@ impl App {
             self.state,
             AppState::InputDomain
                 | AppState::InputPort
-                | AppState::InputFile
                 | AppState::InputSecondDomain
                 | AppState::SavePath
         )
@@ -157,7 +151,6 @@ impl App {
             AppState::MainMenu => self.handle_menu_key(action, event_tx),
             AppState::InputDomain => self.handle_input_key(action, &mut self.domain_input.clone(), event_tx),
             AppState::InputPort => self.handle_port_input_key(action, event_tx),
-            AppState::InputFile => self.handle_file_input_key(action, event_tx),
             AppState::InputSecondDomain => self.handle_second_domain_key(action, event_tx),
             AppState::Checking => self.handle_loading_key(action),
             AppState::Results => self.handle_results_key(action, event_tx),
@@ -192,16 +185,6 @@ impl App {
         match item {
             MenuItem::CheckDomain => {
                 self.domain_input = InputState::new("Enter domain to check")
-                    .with_placeholder("example.com");
-                self.state = AppState::InputDomain;
-            }
-            MenuItem::BatchCheck => {
-                self.file_input = InputState::new("Enter path to domains file")
-                    .with_placeholder("/path/to/domains.txt");
-                self.state = AppState::InputFile;
-            }
-            MenuItem::WatchDomain => {
-                self.domain_input = InputState::new("Enter domain to watch")
                     .with_placeholder("example.com");
                 self.state = AppState::InputDomain;
             }
@@ -251,7 +234,7 @@ impl App {
                                 .with_placeholder("example.org");
                             self.state = AppState::InputSecondDomain;
                         }
-                        Some(MenuItem::WatchDomain) | Some(MenuItem::SearchCtLogs) => {
+                        Some(MenuItem::SearchCtLogs) => {
                             // Start operation directly
                             self.start_check(event_tx);
                         }
@@ -301,29 +284,7 @@ impl App {
         }
     }
 
-    fn handle_file_input_key(&mut self, action: KeyAction, _event_tx: &mpsc::UnboundedSender<AppEvent>) {
-        match action {
-            KeyAction::Back => {
-                self.state = AppState::MainMenu;
-            }
-            KeyAction::Enter => {
-                if !self.file_input.is_empty() {
-                    // TODO: Start batch check
-                    self.state = AppState::Error("Batch check not yet implemented in TUI".to_string());
-                } else {
-                    self.file_input.set_error("File path cannot be empty");
-                }
-            }
-            KeyAction::Char(c) => self.file_input.insert(c),
-            KeyAction::Backspace => self.file_input.delete_backward(),
-            KeyAction::Delete => self.file_input.delete_forward(),
-            KeyAction::Left => self.file_input.move_left(),
-            KeyAction::Right => self.file_input.move_right(),
-            KeyAction::Home => self.file_input.move_home(),
-            KeyAction::End => self.file_input.move_end(),
-            _ => {}
-        }
-    }
+
 
     fn handle_second_domain_key(&mut self, action: KeyAction, _event_tx: &mpsc::UnboundedSender<AppEvent>) {
         match action {
