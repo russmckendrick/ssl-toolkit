@@ -56,20 +56,26 @@ pub fn generate_filename(domain: &str, export_type: ExportType) -> String {
 
 /// Export certificate chain as PEM file
 pub fn export_pem(chain: &CertificateChain, path: &Path) -> Result<()> {
-    let mut pem_content = String::new();
+    let mut pem_parts: Vec<String> = Vec::new();
 
     for cert in &chain.certificates {
         if let Some(ref raw_pem) = cert.raw_pem {
-            pem_content.push_str(raw_pem);
-            pem_content.push('\n');
+            // Trim any extra whitespace from the PEM block
+            let trimmed = raw_pem.trim();
+            if !trimmed.is_empty() {
+                pem_parts.push(trimmed.to_string());
+            }
         }
     }
 
-    if pem_content.is_empty() {
+    if pem_parts.is_empty() {
         return Err(SslToolkitError::Export(
             "No PEM data available in certificate chain".to_string(),
         ));
     }
+
+    // Join with single newline between certificates (no extra blank lines)
+    let pem_content = pem_parts.join("\n");
 
     std::fs::write(path, pem_content).map_err(|e| SslToolkitError::Export(e.to_string()))?;
 
@@ -237,7 +243,8 @@ pub fn export_all(
     // Export PDF
     let pdf_filename = generate_filename(&data.domain, ExportType::Pdf);
     let pdf_path = base_path.join(&pdf_filename);
-    let pdf_result = match pdf::export_pdf(data, &pdf_path) {
+    let pdf_result: Result<()> = pdf::export_pdf(data, &pdf_path);
+    let pdf_export = match pdf_result {
         Ok(()) => ExportResult {
             export_type: ExportType::Pdf,
             path: pdf_path.display().to_string(),
@@ -251,7 +258,7 @@ pub fn export_all(
             error: Some(e.to_string()),
         },
     };
-    results.push(pdf_result);
+    results.push(pdf_export);
 
     // Export PEM
     if let Some(ref chain) = data.chain {
@@ -311,7 +318,8 @@ pub fn export_single(
 
     match export_type {
         ExportType::Pdf => {
-            match pdf::export_pdf(data, &full_path) {
+            let result: Result<()> = pdf::export_pdf(data, &full_path);
+            match result {
                 Ok(()) => ExportResult {
                     export_type,
                     path: full_path.display().to_string(),
