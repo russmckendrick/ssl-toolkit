@@ -12,7 +12,7 @@ use ratatui::{
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum SaveOption {
     #[default]
-    PdfReport,
+    HtmlReport,
     CertificateChain,
     CalendarReminder,
     SaveAll,
@@ -22,7 +22,7 @@ pub enum SaveOption {
 impl SaveOption {
     pub fn all() -> Vec<SaveOption> {
         vec![
-            SaveOption::PdfReport,
+            SaveOption::HtmlReport,
             SaveOption::CertificateChain,
             SaveOption::CalendarReminder,
             SaveOption::SaveAll,
@@ -32,7 +32,7 @@ impl SaveOption {
 
     pub fn label(&self) -> &'static str {
         match self {
-            SaveOption::PdfReport => "PDF Report",
+            SaveOption::HtmlReport => "HTML Report",
             SaveOption::CertificateChain => "Certificate Chain (PEM)",
             SaveOption::CalendarReminder => "Calendar Reminder (iCal)",
             SaveOption::SaveAll => "Save All",
@@ -42,7 +42,7 @@ impl SaveOption {
 
     pub fn description(&self) -> &'static str {
         match self {
-            SaveOption::PdfReport => "Branded PDF with certificate details",
+            SaveOption::HtmlReport => "Interactive HTML report with embedded assets",
             SaveOption::CertificateChain => "Full certificate chain in PEM format",
             SaveOption::CalendarReminder => "Expiry reminders at 30, 15, 5 days",
             SaveOption::SaveAll => "Export all formats",
@@ -178,8 +178,8 @@ impl SavePathState {
         let safe_domain = domain.replace('.', "_").replace(':', "_");
 
         let preview_files = match option {
-            SaveOption::PdfReport => vec![
-                format!("{}_ssl_report_{}.pdf", safe_domain, date),
+            SaveOption::HtmlReport => vec![
+                format!("{}_ssl_report_{}.html", safe_domain, date),
             ],
             SaveOption::CertificateChain => vec![
                 format!("{}_chain.pem", safe_domain),
@@ -188,7 +188,7 @@ impl SavePathState {
                 format!("{}_ssl_expiry.ics", safe_domain),
             ],
             SaveOption::SaveAll => vec![
-                format!("{}_ssl_report_{}.pdf", safe_domain, date),
+                format!("{}_ssl_report_{}.html", safe_domain, date),
                 format!("{}_chain.pem", safe_domain),
                 format!("{}_ssl_expiry.ics", safe_domain),
             ],

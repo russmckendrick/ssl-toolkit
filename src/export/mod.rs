@@ -1,19 +1,18 @@
 //! Export functionality for SSL toolkit results
 //!
 //! Supports exporting to:
-//! - PDF reports
+//! - HTML reports
 //! - PEM certificate chains
 //! - iCal calendar files with reminders
 
 use crate::certificate::CertificateChain;
-use crate::dns::DnsInfo;
 use crate::error::{Result, SslToolkitError};
 use crate::tui::widgets::results::ResultsData;
 use chrono::{DateTime, Duration, Utc};
 use std::path::Path;
 use uuid::Uuid;
 
-pub mod pdf;
+pub mod html;
 
 /// Result of an export operation
 #[derive(Debug, Clone, PartialEq)]
@@ -27,7 +26,7 @@ pub struct ExportResult {
 /// Type of export
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ExportType {
-    Pdf,
+    Html,
     Pem,
     ICal,
 }
@@ -35,7 +34,7 @@ pub enum ExportType {
 impl ExportType {
     pub fn label(&self) -> &'static str {
         match self {
-            ExportType::Pdf => "PDF Report",
+            ExportType::Html => "HTML Report",
             ExportType::Pem => "Certificate Chain",
             ExportType::ICal => "Calendar Reminder",
         }
@@ -48,7 +47,7 @@ pub fn generate_filename(domain: &str, export_type: ExportType) -> String {
     let date = Utc::now().format("%Y%m%d").to_string();
 
     match export_type {
-        ExportType::Pdf => format!("{}_ssl_report_{}.pdf", safe_domain, date),
+        ExportType::Html => format!("{}_ssl_report_{}.html", safe_domain, date),
         ExportType::Pem => format!("{}_chain.pem", safe_domain),
         ExportType::ICal => format!("{}_ssl_expiry.ics", safe_domain),
     }
@@ -240,25 +239,25 @@ pub fn export_all(
 ) -> Vec<ExportResult> {
     let mut results = Vec::new();
 
-    // Export PDF
-    let pdf_filename = generate_filename(&data.domain, ExportType::Pdf);
-    let pdf_path = base_path.join(&pdf_filename);
-    let pdf_result: Result<()> = pdf::export_pdf(data, &pdf_path);
-    let pdf_export = match pdf_result {
+    // Export HTML
+    let html_filename = generate_filename(&data.domain, ExportType::Html);
+    let html_path = base_path.join(&html_filename);
+    let html_result: Result<()> = html::export_html(data, &html_path);
+    let html_export = match html_result {
         Ok(()) => ExportResult {
-            export_type: ExportType::Pdf,
-            path: pdf_path.display().to_string(),
+            export_type: ExportType::Html,
+            path: html_path.display().to_string(),
             success: true,
             error: None,
         },
         Err(e) => ExportResult {
-            export_type: ExportType::Pdf,
-            path: pdf_path.display().to_string(),
+            export_type: ExportType::Html,
+            path: html_path.display().to_string(),
             success: false,
             error: Some(e.to_string()),
         },
     };
-    results.push(pdf_export);
+    results.push(html_export);
 
     // Export PEM
     if let Some(ref chain) = data.chain {
@@ -317,8 +316,8 @@ pub fn export_single(
     let full_path = base_path.join(&filename);
 
     match export_type {
-        ExportType::Pdf => {
-            let result: Result<()> = pdf::export_pdf(data, &full_path);
+        ExportType::Html => {
+            let result: Result<()> = html::export_html(data, &full_path);
             match result {
                 Ok(()) => ExportResult {
                     export_type,
@@ -395,3 +394,4 @@ pub fn export_single(
         }
     }
 }
+
