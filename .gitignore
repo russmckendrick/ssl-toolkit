@@ -49,3 +49,8 @@ temp/
 # Backup files
 *.bak
 *.backup
+
+# Exported files
+*.pdf
+*.pem
+*.ics
