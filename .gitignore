@@ -51,6 +51,6 @@ temp/
 *.backup
 
 # Exported files
-*.pdf
+*.html
 *.pem
 *.ics

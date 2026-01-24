@@ -554,8 +554,8 @@ impl App {
 
             tokio::spawn(async move {
                 let results = match save_option {
-                    SaveOption::PdfReport => {
-                        vec![export::export_single(&data_clone, &base_path, ExportType::Pdf)]
+                    SaveOption::HtmlReport => {
+                        vec![export::export_single(&data_clone, &base_path, ExportType::Html)]
                     }
                     SaveOption::CertificateChain => {
                         vec![export::export_single(&data_clone, &base_path, ExportType::Pem)]
