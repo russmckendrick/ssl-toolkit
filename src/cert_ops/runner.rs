@@ -501,7 +501,7 @@ fn format_results_for_pager(test_results: &[TestResult]) -> String {
 /// Display content in the pager (no save support for cert ops).
 fn display_in_pager(header: &str, content: &str) {
     let no_save = |_: Option<String>| -> Result<Option<String>, String> { Ok(None) };
-    pager::display_paged(header, content, no_save);
+    pager::display_paged(header, content, "", no_save);
 }
 
 /// Generate a default filename for a cert ops HTML report.
@@ -538,6 +538,7 @@ pub fn run_cert_info_interactive() -> Result<(), anyhow::Error> {
 
     let source_files: Vec<String> = files.iter().map(|f| f.display().to_string()).collect();
     let output = format_results_for_pager(&all_results);
+    let default_filename = generate_cert_default_filename(&source_files);
 
     let theme = load_theme();
     let report_data = CertOpsReportData {
@@ -548,10 +549,10 @@ pub fn run_cert_info_interactive() -> Result<(), anyhow::Error> {
     };
 
     let on_save = move |input: Option<String>| -> Result<Option<String>, String> {
-        let default_filename = generate_cert_default_filename(&source_files);
+        let fallback = generate_cert_default_filename(&source_files);
         let path = match input {
             Some(s) if !s.trim().is_empty() => s,
-            _ => default_filename,
+            _ => fallback,
         };
         let report = HtmlReport::new(theme.clone());
         let output_path = PathBuf::from(&path);
@@ -561,7 +562,7 @@ pub fn run_cert_info_interactive() -> Result<(), anyhow::Error> {
             .map_err(|e| e.to_string())
     };
 
-    pager::display_paged(&header, &output, on_save);
+    pager::display_paged(&header, &output, &default_filename, on_save);
     Ok(())
 }
 
@@ -607,6 +608,7 @@ pub fn run_cert_verify_interactive() -> Result<(), anyhow::Error> {
 
     let (all_results, cert_infos) = collect_cert_verify(&args)?;
     let output = format_results_for_pager(&all_results);
+    let default_filename = generate_cert_default_filename(&source_files);
 
     let theme = load_theme();
     let report_data = CertOpsReportData {
@@ -617,10 +619,10 @@ pub fn run_cert_verify_interactive() -> Result<(), anyhow::Error> {
     };
 
     let on_save = move |input: Option<String>| -> Result<Option<String>, String> {
-        let default_filename = generate_cert_default_filename(&source_files);
+        let fallback = generate_cert_default_filename(&source_files);
         let path = match input {
             Some(s) if !s.trim().is_empty() => s,
-            _ => default_filename,
+            _ => fallback,
         };
         let report = HtmlReport::new(theme.clone());
         let output_path = PathBuf::from(&path);
@@ -630,7 +632,7 @@ pub fn run_cert_verify_interactive() -> Result<(), anyhow::Error> {
             .map_err(|e| e.to_string())
     };
 
-    pager::display_paged(&header, &output, on_save);
+    pager::display_paged(&header, &output, &default_filename, on_save);
     Ok(())
 }
 

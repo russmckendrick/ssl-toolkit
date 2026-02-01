@@ -298,15 +298,16 @@ async fn run_domain_check_interactive(
             }
 
             let header = format!("SSL/TLS Report for {} (port {})", domain, port);
+            let default_filename = generate_default_filename(&domain);
 
             let save_domain = domain.clone();
             let save_theme = theme.clone();
             let save_run_result = &run_result;
             let on_save = move |input: Option<String>| {
-                let default_filename = generate_default_filename(&save_domain);
+                let fallback = generate_default_filename(&save_domain);
                 let path = match input {
                     Some(s) if !s.trim().is_empty() => s,
-                    _ => default_filename.clone(),
+                    _ => fallback,
                 };
                 let report = HtmlReport::new(save_theme.clone());
                 let output_path = PathBuf::from(&path);
@@ -316,7 +317,7 @@ async fn run_domain_check_interactive(
                     .map_err(|e| e.to_string())
             };
 
-            let action = pager::display_paged(&header, &output, on_save);
+            let action = pager::display_paged(&header, &output, &default_filename, on_save);
 
             match action {
                 PagerAction::NewCheck => Ok(DomainCheckOutcome::NewCheck),
@@ -638,15 +639,16 @@ async fn run_domain_check_cli(
 
                 if is_interactive {
                     let header = format!("SSL/TLS Report for {} (port {})", domain, port);
+                    let default_filename = generate_default_filename(&domain);
 
                     let save_domain = domain.clone();
                     let save_theme = theme.clone();
                     let save_run_result = &run_result;
                     let on_save = move |input: Option<String>| {
-                        let default_filename = generate_default_filename(&save_domain);
+                        let fallback = generate_default_filename(&save_domain);
                         let path = match input {
                             Some(s) if !s.trim().is_empty() => s,
-                            _ => default_filename.clone(),
+                            _ => fallback,
                         };
                         let report = HtmlReport::new(save_theme.clone());
                         let output_path = PathBuf::from(&path);
@@ -656,7 +658,7 @@ async fn run_domain_check_cli(
                             .map_err(|e| e.to_string())
                     };
 
-                    let action = pager::display_paged(&header, &output, on_save);
+                    let action = pager::display_paged(&header, &output, &default_filename, on_save);
 
                     match action {
                         PagerAction::NewCheck => {

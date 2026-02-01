@@ -4,6 +4,7 @@
 //! and a status bar with navigation hints. Accounts for line wrapping
 //! so that the status bar always stays visible at the bottom.
 
+use super::interactive;
 use ansi_to_tui::IntoText;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
@@ -12,10 +13,10 @@ use crossterm::{
 };
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    widgets::{Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
     Terminal,
 };
 use std::io::{stdout, Stdout};
@@ -40,7 +41,15 @@ enum StatusColor {
 }
 
 /// Display text content with smooth scrolling.
-pub fn display_paged<F>(header: &str, content: &str, on_save: F) -> PagerAction
+///
+/// `default_filename` is shown as the initial value in the save-report
+/// prompt (press `s`). Pass an empty string to disable save.
+pub fn display_paged<F>(
+    header: &str,
+    content: &str,
+    default_filename: &str,
+    on_save: F,
+) -> PagerAction
 where
     F: Fn(Option<String>) -> Result<Option<String>, String>,
 {
@@ -52,7 +61,7 @@ where
     let mut terminal = Terminal::new(backend).unwrap();
 
     // Run pager loop
-    let result = run_pager(&mut terminal, header, content, on_save);
+    let result = run_pager(&mut terminal, header, content, default_filename, on_save);
 
     // Restore terminal
     disable_raw_mode().unwrap();
@@ -66,6 +75,7 @@ fn run_pager<F>(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     header: &str,
     content: &str,
+    default_filename: &str,
     on_save: F,
 ) -> PagerAction
 where
@@ -85,13 +95,6 @@ where
     // Flash message state
     let mut flash: Option<(String, StatusColor)> = None;
 
-    // Popup state
-    let mut show_save_popup = false;
-    let mut save_input = String::new();
-    // Placeholder default filename (would be better passed in, but we can default empty or generic)
-    // We'll let the user type, or if empty, on_save can handle default.
-    // Actually, let's make the input empty initially.
-
     loop {
         terminal
             .draw(|f| {
@@ -104,22 +107,25 @@ where
                     ])
                     .split(f.area());
 
+                // Tokyo Night Storm palette constants
+                let tn_primary = Color::Rgb(122, 162, 247); // #7aa2f7
+                let tn_border = Color::Rgb(86, 95, 137); // #565f89
+                let tn_bg = Color::Rgb(36, 40, 59); // #24283b
+
                 // 1. Header
                 let header_text = Line::from(vec![
-                    Span::styled("◆", Style::default().fg(Color::Cyan)),
+                    Span::styled("◆", Style::default().fg(tn_primary)),
                     Span::raw(" "),
                     Span::styled(
                         header,
-                        Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::BOLD),
+                        Style::default().fg(tn_primary).add_modifier(Modifier::BOLD),
                     ),
                 ]);
                 let header_para = Paragraph::new(vec![
                     header_text,
                     Line::from(Span::styled(
                         "─".repeat(chunks[0].width as usize),
-                        Style::default().add_modifier(Modifier::DIM),
+                        Style::default().fg(tn_border),
                     )),
                 ]);
                 f.render_widget(header_para, chunks[0]);
@@ -162,16 +168,13 @@ where
                 // 3. Status Bar
                 let status_area = chunks[2];
                 if let Some((ref msg, color)) = flash {
-                    // Render flash message
+                    // Render flash message with Tokyo Night colours
                     let bg_color = match color {
-                        StatusColor::Cyan => Color::Cyan,
-                        StatusColor::Green => Color::Green,
-                        StatusColor::Red => Color::Red,
+                        StatusColor::Cyan => Color::Rgb(122, 162, 247), // primary
+                        StatusColor::Green => Color::Rgb(158, 206, 106), // pass green
+                        StatusColor::Red => Color::Rgb(247, 118, 142),  // fail red
                     };
-                    let text_color = match color {
-                        StatusColor::Red => Color::White,
-                        _ => Color::Black,
-                    };
+                    let text_color = Color::Rgb(36, 40, 59); // background as text
 
                     let padded_msg = format!("{:<width$}", msg, width = status_area.width as usize);
                     let status_widget = Paragraph::new(padded_msg)
@@ -202,53 +205,9 @@ where
                     let gap = available_width.saturating_sub(left_len + right_len);
                     let status_text = format!("{}{}{}", status_left, " ".repeat(gap), status_right);
 
-                    let status_widget = Paragraph::new(status_text)
-                        .style(Style::default().bg(Color::White).fg(Color::Black));
+                    let status_widget =
+                        Paragraph::new(status_text).style(Style::default().bg(tn_border).fg(tn_bg));
                     f.render_widget(status_widget, status_area);
-                }
-
-                // 4. Save Popup
-                if show_save_popup {
-                    let area = centered_rect(60, 20, f.area());
-                    f.render_widget(Clear, area); // Clear background
-
-                    let block = Block::default()
-                        .title(" Save Report ")
-                        .borders(Borders::ALL)
-                        .style(Style::default().bg(Color::DarkGray).fg(Color::White));
-
-                    let inner_area = block.inner(area);
-                    f.render_widget(block, area);
-
-                    let vertical = Layout::default()
-                        .direction(Direction::Vertical)
-                        .constraints([
-                            Constraint::Length(1), // Prompt
-                            Constraint::Length(1), // Input
-                            Constraint::Length(1), // Hint
-                        ])
-                        .margin(1)
-                        .split(inner_area);
-
-                    f.render_widget(
-                        Paragraph::new("Enter filename (leave empty for default):"),
-                        vertical[0],
-                    );
-
-                    f.render_widget(
-                        Paragraph::new(format!("> {}_", save_input)).style(
-                            Style::default()
-                                .fg(Color::Cyan)
-                                .add_modifier(Modifier::BOLD),
-                        ),
-                        vertical[1],
-                    );
-
-                    f.render_widget(
-                        Paragraph::new("Enter: Confirm  Esc: Cancel")
-                            .style(Style::default().fg(Color::Gray).add_modifier(Modifier::DIM)),
-                        vertical[2],
-                    );
                 }
             })
             .unwrap();
@@ -257,20 +216,58 @@ where
         if event::poll(Duration::from_millis(100)).unwrap() {
             if let Event::Key(key) = event::read().unwrap() {
                 if key.kind == KeyEventKind::Press {
-                    if show_save_popup {
-                        // Handle popup input
-                        match key.code {
-                            KeyCode::Enter => {
-                                show_save_popup = false;
-                                let input = if save_input.trim().is_empty() {
-                                    None
-                                } else {
-                                    Some(save_input.clone())
-                                };
-                                let result = on_save(input);
-                                flash = Some(match result {
-                                    Ok(Some(path)) => (
-                                        format!(" ✓ Saved: {} — press any key", path),
+                    // Clear flash on any key
+                    if flash.is_some() {
+                        flash = None;
+                    }
+
+                    match key.code {
+                        KeyCode::Char('q') | KeyCode::Esc => return PagerAction::Quit,
+                        KeyCode::Char('n') | KeyCode::Char('N') => return PagerAction::NewCheck,
+
+                        // Scrolling
+                        KeyCode::Down | KeyCode::Char('j') | KeyCode::Enter => {
+                            if scroll_offset < total_lines.saturating_sub(1) {
+                                scroll_offset += 1;
+                            }
+                        }
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            scroll_offset = scroll_offset.saturating_sub(1);
+                        }
+                        KeyCode::PageDown | KeyCode::Char(' ') => {
+                            let height = terminal.size().unwrap().height as usize;
+                            let viewport = height.saturating_sub(4).max(1);
+                            scroll_offset =
+                                (scroll_offset + viewport).min(total_lines.saturating_sub(1));
+                        }
+                        KeyCode::PageUp | KeyCode::Char('b') => {
+                            let height = terminal.size().unwrap().height as usize;
+                            let viewport = height.saturating_sub(4).max(1);
+                            scroll_offset = scroll_offset.saturating_sub(viewport);
+                        }
+                        KeyCode::Home | KeyCode::Char('g') => {
+                            scroll_offset = 0;
+                        }
+                        KeyCode::End | KeyCode::Char('G') => {
+                            scroll_offset = total_lines.saturating_sub(1);
+                        }
+
+                        // Save — leave alternate screen, show inquire prompt
+                        KeyCode::Char('s') | KeyCode::Char('S') => {
+                            // Temporarily exit the pager's alternate screen
+                            disable_raw_mode().unwrap();
+                            execute!(std::io::stdout(), LeaveAlternateScreen).unwrap();
+                            terminal.show_cursor().unwrap();
+
+                            // Show the interactive save prompt with file explorer
+                            let save_path =
+                                interactive::prompt_report_path(default_filename).unwrap_or(None);
+
+                            // Process the result through on_save
+                            flash = Some(match save_path {
+                                Some(path) => match on_save(Some(path)) {
+                                    Ok(Some(saved)) => (
+                                        format!(" ✓ Saved: {} — press any key", saved),
                                         StatusColor::Green,
                                     ),
                                     Ok(None) => (
@@ -280,99 +277,24 @@ where
                                     Err(e) => {
                                         (format!(" ✗ {} — press any key", e), StatusColor::Red)
                                     }
-                                });
-                                save_input.clear();
-                            }
-                            KeyCode::Esc => {
-                                show_save_popup = false;
-                                save_input.clear();
-                                flash = Some((
+                                },
+                                None => (
                                     " Save cancelled — press any key".to_string(),
                                     StatusColor::Red,
-                                ));
-                            }
-                            KeyCode::Char(c) => {
-                                save_input.push(c);
-                            }
-                            KeyCode::Backspace => {
-                                save_input.pop();
-                            }
-                            _ => {}
-                        }
-                    } else {
-                        // Clear flash on any key
-                        if flash.is_some() {
-                            flash = None;
-                            // Don't consume navigation keys just to clear flash?
-                            // Original implementation: "any key clears the flash message",
-                            // and "If the key was a navigation key, also apply it"
+                                ),
+                            });
+
+                            // Re-enter the pager's alternate screen
+                            enable_raw_mode().unwrap();
+                            execute!(std::io::stdout(), EnterAlternateScreen).unwrap();
+                            // Force a full redraw after returning from the prompt
+                            terminal.clear().unwrap();
                         }
 
-                        match key.code {
-                            KeyCode::Char('q') | KeyCode::Esc => return PagerAction::Quit,
-                            KeyCode::Char('n') | KeyCode::Char('N') => {
-                                return PagerAction::NewCheck
-                            }
-
-                            // Scrolling
-                            KeyCode::Down | KeyCode::Char('j') | KeyCode::Enter => {
-                                if scroll_offset < total_lines.saturating_sub(1) {
-                                    scroll_offset += 1;
-                                }
-                            }
-                            KeyCode::Up | KeyCode::Char('k') => {
-                                scroll_offset = scroll_offset.saturating_sub(1);
-                            }
-                            KeyCode::PageDown | KeyCode::Char(' ') => {
-                                let height = terminal.size().unwrap().height as usize;
-                                let viewport = height.saturating_sub(4).max(1); // approx viewport
-                                scroll_offset =
-                                    (scroll_offset + viewport).min(total_lines.saturating_sub(1));
-                            }
-                            KeyCode::PageUp | KeyCode::Char('b') => {
-                                let height = terminal.size().unwrap().height as usize;
-                                let viewport = height.saturating_sub(4).max(1);
-                                scroll_offset = scroll_offset.saturating_sub(viewport);
-                            }
-                            KeyCode::Home | KeyCode::Char('g') => {
-                                scroll_offset = 0;
-                            }
-                            KeyCode::End | KeyCode::Char('G') => {
-                                scroll_offset = total_lines.saturating_sub(1);
-                            }
-
-                            // Save Action - Open Popup
-                            KeyCode::Char('s') | KeyCode::Char('S') => {
-                                show_save_popup = true;
-                                save_input.clear();
-                            }
-
-                            _ => {}
-                        }
+                        _ => {}
                     }
                 }
             }
         }
     }
-}
-
-/// Helper function to create a centered rect using up certain percentage of the available rect `r`
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
 }

@@ -56,6 +56,8 @@ fn tokyo_night_render_config() -> RenderConfig<'static> {
     config.help_message = StyleSheet::new().with_fg(muted);
     // Text input: foreground
     config.text_input = StyleSheet::new().with_fg(foreground);
+    // Placeholder text: muted
+    config.placeholder = StyleSheet::new().with_fg(muted);
     // Highlighted option prefix: ❯ in purple
     config.highlighted_option_prefix = Styled::new("❯").with_fg(purple);
     // Selected/highlighted option: purple
@@ -413,12 +415,45 @@ pub fn prompt_save_report(default_path: &str) -> anyhow::Result<Option<String>> 
     }
 }
 
-/// Prompt for the report save path (used when user presses 's' in pager)
-pub fn prompt_report_path(default_path: &str) -> anyhow::Result<String> {
-    let path = Text::new("Save report to:")
-        .with_default(default_path)
-        .prompt()?;
-    Ok(path)
+/// Prompt for the report save path (used when user presses 's' in pager).
+///
+/// Shows the file explorer with autocomplete, starting from the current
+/// working directory. The `default_filename` is appended to the cwd as
+/// the initial value so the user can accept it or navigate elsewhere.
+/// Returns `None` if the user cancels (Esc / Ctrl+C).
+pub fn prompt_report_path(default_filename: &str) -> anyhow::Result<Option<String>> {
+    let cwd = std::env::current_dir()
+        .map(|p| {
+            let s = p.to_string_lossy().to_string();
+            let sep = std::path::MAIN_SEPARATOR;
+            if s.ends_with(sep) {
+                s
+            } else {
+                format!("{}{}", s, sep)
+            }
+        })
+        .unwrap_or_default();
+
+    let initial = format!("{}{}", cwd, default_filename);
+
+    let result = Text::new("Save report to:")
+        .with_initial_value(&initial)
+        .with_autocomplete(FilePathCompleter::default())
+        .with_help_message("Tab to autocomplete · Esc to cancel")
+        .prompt();
+
+    match result {
+        Ok(path) => {
+            let trimmed = path.trim();
+            if trimmed.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(trimmed.to_string()))
+            }
+        }
+        Err(InquireError::OperationCanceled | InquireError::OperationInterrupted) => Ok(None),
+        Err(e) => Err(e.into()),
+    }
 }
 
 /// Main menu action choices
