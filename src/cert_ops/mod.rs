@@ -9,4 +9,4 @@ pub mod key_match;
 pub mod reader;
 pub mod runner;
 
-pub use reader::DetectedFormat;
+pub use reader::{detect_format_from_bytes, DetectedFormat};

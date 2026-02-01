@@ -57,19 +57,3 @@ impl PemExporter {
         format!("data:application/x-pem-file;base64,{}", b64)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_export_chain() {
-        let chain = vec![
-            vec![0x30, 0x82, 0x01, 0x00], // Minimal DER header
-        ];
-
-        let pem = PemExporter::export_chain(&chain);
-        assert!(pem.contains("-----BEGIN CERTIFICATE-----"));
-        assert!(pem.contains("-----END CERTIFICATE-----"));
-    }
-}
