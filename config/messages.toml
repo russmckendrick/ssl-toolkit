@@ -1,0 +1,108 @@
+# SSL-Toolkit Message Templates
+
+[header]
+app_name = "SSL Toolkit"
+separator = " │ "
+
+[header.screen_names]
+welcome = "Welcome"
+domain_input = "Enter Domain"
+dns_results = "DNS Results"
+ip_selection = "Select IPs"
+port_selection = "Select Port"
+running = "Running Checks"
+results = "Results"
+save_prompt = "Save Report"
+complete = "Complete"
+error = "Error"
+
+[footer]
+nav_separator = " │ "
+back_hint = "← Back"
+next_hint = "Next →"
+
+[welcome]
+title = "SSL Toolkit"
+subtitle = "SSL/TLS Certificate Diagnostic Tool"
+prompt = "Enter domain to check:"
+hint = "Press Enter to continue, Esc to quit"
+
+[checks]
+dns_title = "DNS Resolution"
+dns_resolving = "Resolving DNS records..."
+dns_success = "DNS resolution successful"
+dns_failed = "DNS resolution failed"
+whois_title = "WHOIS Lookup"
+whois_querying = "Querying WHOIS servers..."
+tcp_title = "TCP Connectivity"
+tcp_connecting = "Testing TCP connection..."
+tcp_success = "TCP connection successful"
+tcp_failed = "TCP connection failed"
+ssl_title = "SSL/TLS Analysis"
+ssl_handshaking = "Performing SSL handshake..."
+ssl_success = "SSL handshake successful"
+ssl_failed = "SSL handshake failed"
+cert_title = "Certificate Analysis"
+cert_parsing = "Parsing certificate..."
+cert_valid = "Certificate is valid"
+cert_expired = "Certificate has expired"
+cert_expiring_soon = "Certificate expires within {days} days"
+
+[errors]
+invalid_domain = "Invalid domain name: {domain}"
+connection_refused = "Connection refused to {ip}:{port}"
+connection_timeout = "Connection timed out to {ip}:{port}"
+handshake_failed = "SSL handshake failed: {error}"
+no_certificate = "No certificate received from server"
+parse_error = "Failed to parse certificate: {error}"
+
+[recommendations]
+upgrade_tls = "Consider upgrading to TLS 1.3 for improved security"
+disable_legacy = "Disable legacy protocols (TLS 1.0, TLS 1.1, SSLv3)"
+renew_soon = "Certificate expires in {days} days - plan renewal"
+renew_urgent = "Certificate expires in {days} days - renew immediately"
+fix_chain = "Fix certificate chain - missing intermediate certificates"
+use_strong_cipher = "Consider using stronger cipher suites"
+
+[report]
+title = "SSL/TLS Diagnostic Report"
+generated = "Generated on {date}"
+summary = "Summary"
+details = "Detailed Results"
+recommendations = "Recommendations"
+export_pem = "Export Certificate Chain (PEM)"
+export_ical = "Export Expiry Reminder (iCal)"
+
+[hints]
+welcome = "Enter: Start │ q: Quit │ ?: Help"
+domain_input = "Enter: Submit │ Esc: Back │ ?: Help"
+dns_results = "Enter: Continue │ Esc: Back │ ?: Help"
+ip_selection = "↑/↓: Navigate │ Space: Toggle │ a: All │ Enter: Continue │ ?: Help"
+port_selection = "Enter: Submit │ Esc: Back │ ?: Help"
+running = "Please wait..."
+results = "↑/↓: Scroll │ e: Expand │ s: Save │ ?: Help │ q: Quit"
+save_prompt = "Enter: Save │ Esc: Cancel"
+error = "r: Retry │ q: Quit │ ?: Help"
+
+[help]
+title = "SSL Toolkit Help"
+
+[[help.sections]]
+header = "Navigation"
+content = "Use ↑/↓ or j/k to navigate up/down. Use ←/→ or h/l to go back/forward in wizard steps. Press Enter to confirm."
+
+[[help.sections]]
+header = "Global Keys"
+content = "Press ? or F1 for help, Esc to go back, q to quit the application."
+
+[[help.sections]]
+header = "Results View"
+content = "Press e to expand/collapse sections, s to save the report, ↑/↓ to scroll."
+
+[[help.sections]]
+header = "IP Selection"
+content = "Press Space to toggle selection, a to select all, Tab for custom IP input."
+
+[[help.sections]]
+header = "Error Recovery"
+content = "Press r to retry the last operation, or q to quit."

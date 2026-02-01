@@ -5,49 +5,96 @@ on:
     tags:
       - 'v*'
 
-permissions: # Set top-level default permissions
+permissions:
   contents: write
-  packages: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  build:
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: ssl-toolkit-linux-amd64
+            run_tests: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact: ssl-toolkit-darwin-amd64
+            run_tests: false
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact: ssl-toolkit-darwin-arm64
+            run_tests: false
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact: ssl-toolkit-windows-amd64.exe
+            run_tests: false
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          go-version: '1.21'
-          cache: true
+          targets: ${{ matrix.target }}
+
+      - name: Install system dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
 
       - name: Run tests
-        run: go test -v ./...
+        if: matrix.run_tests
+        run: cargo test
 
-      - name: Build
-        run: |
-          mkdir -p build
-          GOOS=linux GOARCH=amd64 go build -o build/ssl-toolkit-linux-amd64 ./cmd/ssl-toolkit
-          GOOS=windows GOARCH=amd64 go build -o build/ssl-toolkit-windows-amd64.exe ./cmd/ssl-toolkit
-          GOOS=darwin GOARCH=amd64 go build -o build/ssl-toolkit-darwin-amd64 ./cmd/ssl-toolkit
-          GOOS=darwin GOARCH=arm64 go build -o build/ssl-toolkit-darwin-arm64 ./cmd/ssl-toolkit
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Calculate checksums
+      - name: Rename binary (Unix)
+        if: matrix.os != 'windows-latest'
+        run: cp target/${{ matrix.target }}/release/ssl-toolkit ${{ matrix.artifact }}
+
+      - name: Rename binary (Windows)
+        if: matrix.os == 'windows-latest'
+        run: cp target/${{ matrix.target }}/release/ssl-toolkit.exe ${{ matrix.artifact }}
+
+      - name: Generate checksum (Unix)
+        if: matrix.os != 'windows-latest'
+        run: shasum -a 256 ${{ matrix.artifact }} > ${{ matrix.artifact }}.sha256
+
+      - name: Generate checksum (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
         run: |
-          cd build
-          sha256sum ssl-toolkit-darwin-amd64 > ssl-toolkit-darwin-amd64.sha256
-          sha256sum ssl-toolkit-darwin-arm64 > ssl-toolkit-darwin-arm64.sha256
+          $hash = (Get-FileHash -Algorithm SHA256 ${{ matrix.artifact }}).Hash.ToLower()
+          "$hash  ${{ matrix.artifact }}" | Out-File -Encoding ascii ${{ matrix.artifact }}.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}
+            ${{ matrix.artifact }}.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect release files
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -la release/
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          files: |
-            build/ssl-toolkit-linux-amd64
-            build/ssl-toolkit-windows-amd64.exe
-            build/ssl-toolkit-darwin-amd64
-            build/ssl-toolkit-darwin-arm64
-            build/ssl-toolkit-darwin-amd64.sha256
-            build/ssl-toolkit-darwin-arm64.sha256
+          files: release/*
           draft: false
           prerelease: false
-          generate_release_notes: true 
+          generate_release_notes: true

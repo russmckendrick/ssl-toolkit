@@ -1,51 +1,26 @@
-# Binaries and build artifacts
-/build/
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-*.pem
-*.ics
+# Rust build artifacts
+/target/
+**/*.rs.bk
+Cargo.lock
 
-# Test binary, built with `go test -c`
-*.test
-
-# Output of the go coverage tool
-*.out
-
-# Dependency directories
-/vendor/
-
-# Go workspace file
-go.work
-
-# IDE specific files
+# IDE files
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
 
-# OS specific files
+# OS files
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# Debug files
-debug/
+# Generated files
+*.html
+!templates/*.html
 
-# Environment files
-.env
-.env.local
-
-# Log files
+# Logs
 *.log
 
-# Temporary files
-tmp/
-temp/ 
+# Test output
+*.pem
+*.ics

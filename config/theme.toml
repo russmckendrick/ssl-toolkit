@@ -1,0 +1,77 @@
+# SSL-Toolkit Theme Configuration - Tokyo Night Storm Edition
+
+[icons]
+pass = "✓"
+fail = "✗"
+warning = "!"
+info = "i"
+critical = "X"
+cert_leaf = "📄"
+cert_intermediate = "⛓"
+cert_root = "🔒"
+arrow_right = "→"
+bullet = "•"
+spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+nav_left = "<"
+nav_right = ">"
+step_complete = "●"
+step_current = "⦿"
+step_pending = "○"
+
+[box_chars]
+top_left = "╭"
+top_right = "╮"
+bottom_left = "╰"
+bottom_right = "╯"
+horizontal = "─"
+vertical = "│"
+t_left = "├"
+t_right = "┤"
+t_top = "┬"
+t_bottom = "┴"
+cross = "┼"
+
+[double_box]
+top_left = "╭"
+top_right = "╮"
+bottom_left = "╰"
+bottom_right = "╯"
+horizontal = "═"
+vertical = "║"
+
+[colors]
+# Tokyo Night Storm Palette
+pass = "#9ece6a"      # Green
+fail = "#f7768e"      # Red
+warning = "#e0af68"   # Orange
+info = "#7dcfff"      # Cyan
+primary = "#7aa2f7"   # Blue
+secondary = "#a9b1d6" # Foreground / Lavender
+background = "#24283b" # Storm Blue Background
+foreground = "#c0caf5" # Text
+border = "#565f89"    # Muted Blue
+highlight = "#bb9af7" # Purple
+# Keyboard shortcuts styling
+key_background = "#414868"
+key_foreground = "#c0caf5"
+# Table header styling
+table_header_bg = "#414868"
+# Grade colors
+grade_a = "#9ece6a"
+grade_b = "#7aa2f7"
+grade_c = "#e0af68"
+grade_f = "#f7768e"
+# Progress bar colors
+bar_filled = "#7aa2f7"
+bar_empty = "#414868"
+
+[visual]
+bar_filled = "━"
+bar_partial = "╸"
+bar_empty = "─"
+dot_filled = "●"
+dot_empty = "○"
+badge_left = " "
+badge_right = " "
+expand_open = "▼"
+expand_closed = "▶"

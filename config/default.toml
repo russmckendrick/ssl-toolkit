@@ -1,0 +1,35 @@
+# SSL-Toolkit Default Configuration
+
+# DNS Providers
+[[dns_providers]]
+name = "System"
+servers = []
+description = "System default DNS resolver"
+
+[[dns_providers]]
+name = "Google"
+servers = ["8.8.8.8", "8.8.4.4"]
+description = "Google Public DNS"
+
+[[dns_providers]]
+name = "Cloudflare"
+servers = ["1.1.1.1", "1.0.0.1"]
+description = "Cloudflare DNS"
+
+[[dns_providers]]
+name = "OpenDNS"
+servers = ["208.67.222.222", "208.67.220.220"]
+description = "Cisco OpenDNS"
+
+# SSL/TLS Settings
+[ssl]
+connect_timeout_secs = 10
+handshake_timeout_secs = 10
+check_legacy_protocols = true
+check_weak_ciphers = true
+
+# WHOIS Settings
+[whois]
+timeout_secs = 10
+retry_count = 3
+backoff_base_ms = 1000

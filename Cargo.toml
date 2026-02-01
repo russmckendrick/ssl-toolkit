@@ -1,0 +1,74 @@
+[package]
+name = "ssl-toolkit"
+version = "0.1.0"
+edition = "2021"
+description = "SSL/TLS diagnostic tool with polished CLI interface"
+authors = ["Russ McKendrick"]
+license = "MIT"
+
+[dependencies]
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Async
+tokio = { version = "1", features = ["full"] }
+
+# CLI Output
+console = "0.15"
+dialoguer = { version = "0.11", features = ["fuzzy-select"] }
+comfy-table = "7"
+serde_json = "1"
+
+# DNS
+hickory-resolver = "0.25"
+hickory-proto = "0.25"
+
+# TLS
+rustls = "0.23"
+tokio-rustls = "0.26"
+native-tls = "0.2"
+tokio-native-tls = "0.3"
+webpki-roots = "0.26"
+rustls-pki-types = "1"
+
+# Certificate parsing
+x509-parser = "0.16"
+sha2 = "0.10"
+
+# Progress
+indicatif = "0.17"
+
+# Configuration
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+# Templating
+minijinja = "2"
+
+# Calendar
+icalendar = "0.16"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Errors
+thiserror = "2"
+anyhow = "1"
+
+# Display
+unicode-width = "0.2"
+base64 = "0.22"
+
+# WHOIS
+whois-rust = { version = "1.6", features = ["tokio"] }
+ratatui = "0.30.0"
+crossterm = "0.29.0"
+ansi-to-tui = "8.0.1"
+
+[dev-dependencies]
+wiremock = "0.6"
+tokio-test = "0.4"
