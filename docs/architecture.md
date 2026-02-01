@@ -12,6 +12,7 @@ flowchart TB
 
     subgraph Runner["Orchestration"]
         runner[runner.rs]
+        certRunner[cert_ops/runner.rs]
     end
 
     subgraph Checks["Check Modules"]
@@ -20,6 +21,13 @@ flowchart TB
         ssl[SSL Checker]
         cert[Certificate Checker]
         whois[WHOIS Checker]
+    end
+
+    subgraph CertOps["Certificate File Ops"]
+        certReader[reader.rs]
+        certKeyMatch[key_match.rs]
+        certChainVerify[chain_verify.rs]
+        certConvert[convert.rs]
     end
 
     subgraph Models["Data Models"]
@@ -31,7 +39,7 @@ flowchart TB
     end
 
     subgraph Output["Output Module"]
-        interactive[Interactive Prompts]
+        interactive[Interactive Prompts<br/>Main Menu / Cert Prompts]
         results[Results Display]
         pager[Pager View]
         json[JSON Output]
@@ -44,9 +52,13 @@ flowchart TB
         ical[iCal Export]
     end
 
-    main --> runner
     main --> interactive
+    main --> runner
+    main --> certRunner
+    interactive --> main
     runner --> Checks
+    certRunner --> CertOps
+    certRunner --> pager
     Checks --> Models
     Models --> Output
     Models --> Reports
@@ -59,8 +71,16 @@ flowchart TB
 The main entry point handles:
 - CLI argument parsing using Clap
 - Configuration loading
+- Calling `interactive::init_theme()` to apply the Tokyo Night Storm inquire theme globally
+- **Interactive menu mode**: When run with no arguments and a TTY is available, shows a banner and a top-level menu (Check a domain, Inspect certificate file(s), Verify certificate & key, Convert certificate format, Quit). After each operation, a post-operation prompt offers to return to the menu or quit. The screen is cleared and the banner redrawn when returning to the menu.
+- **Direct CLI mode**: When a domain is provided via `--domain` or a `cert` subcommand is used, skips the menu and runs the operation directly.
 - Mode selection (interactive CLI, non-interactive, JSON, quiet)
+- Graceful Ctrl+C handling: all prompt sites use `is_user_cancel()` to detect cancellation and exit cleanly without error messages
 - Top-level error handling
+
+The menu loop delegates to:
+- `run_domain_check_interactive()` for domain checks (results displayed in the ratatui pager; pager "n" key returns to menu)
+- `cert_ops::runner::run_cert_info_interactive()` / `run_cert_verify_interactive()` / `run_cert_convert_interactive()` for certificate file operations (results displayed in the pager)
 
 ### CLI Module (`src/cli/`)
 
@@ -155,6 +175,15 @@ pub struct RunResult {
 Key functions:
 - `resolve_dns()` - DNS resolution across all providers
 - `run_checks()` - Runs TCP, SSL, certificate, WHOIS checks and certificate comparison
+
+### Certificate File Operations (`src/cert_ops/`)
+
+Handles offline certificate file operations (inspect, verify, convert). The runner (`cert_ops/runner.rs`) provides two layers:
+
+- **CLI functions** (`run_cert_info`, `run_cert_verify`, `run_cert_convert`): Called from the `cert` subcommand, print output directly to stdout.
+- **Interactive functions** (`run_cert_info_interactive`, `run_cert_verify_interactive`, `run_cert_convert_interactive`): Called from the main menu, prompt for inputs via `inquire`, collect `TestResult` objects, format them, and display in the ratatui pager.
+
+Internal helpers `collect_cert_info()` and `collect_cert_verify()` separate result-building from output, enabling both paths to share the same logic.
 
 ### Check Modules (`src/checks/`)
 
@@ -325,16 +354,24 @@ classDiagram
 
 Handles all CLI output formatting and user interaction:
 
-- **banner.rs**: ASCII art banner display
-- **interactive.rs**: Interactive prompts using `dialoguer` (domain input, IP selection, port selection)
+- **banner.rs**: ASCII art banner display, `clear_screen()` and `refresh_banner()` helpers for redrawing the banner when returning to the main menu
+- **interactive.rs**: Interactive prompts using `inquire` with a custom Tokyo Night Storm theme:
+  - `init_theme()` — sets the global `RenderConfig` with Tokyo Night Storm colours (blue `❯` prefix, green `✓` answered, purple highlighted options, etc.)
+  - `is_user_cancel()` — detects Ctrl+C / Esc from `anyhow::Error` (checks for `InquireError::OperationCanceled` and `OperationInterrupted`)
+  - `prompt_main_menu()` — top-level menu (domain check, cert info/verify/convert, quit)
+  - `prompt_post_operation()` — "Run another check" / "Quit" after each operation
+  - `prompt_domain()`, `prompt_port()`, `prompt_ip_selection()` — domain check prompts
+  - `prompt_cert_info_interactive()`, `prompt_cert_verify_interactive()`, `prompt_cert_convert_interactive()` — certificate file operation prompts
+  - `prompt_file_path()`, `prompt_optional_file_path()` — file path prompts with tab-completion `FilePathCompleter` (sorts dirs first, hides dotfiles, cross-platform separators, starts from home directory)
+  - `prompt_report_path()` — save report prompt with `FilePathCompleter` starting from cwd
 - **results.rs**: Formatted check result display with status icons and colored output
 - **tables.rs**: Table formatting using `comfy-table`
 - **grade.rs**: Visual grade display (A+ through F) with score bars
 - **cert_chain.rs**: Certificate chain visualization
 - **json.rs**: JSON output mode for scripting
-- **pager.rs**: Ratatui-based scrollable viewer for results with status bar
+- **pager.rs**: Ratatui-based scrollable viewer used for both domain check results and certificate file operation results. Themed with Tokyo Night Storm colours (blue header, muted border status bar, green/red flash messages). Save (`s` key) temporarily exits the alternate screen and shows an `inquire` prompt with `FilePathCompleter` for choosing the output path.
 
-The interactive flow is linear: prompts collect input sequentially, then results are displayed in the pager.
+The interactive flow uses a menu loop: the main menu collects a choice, the chosen operation runs and displays results in the pager, then the post-operation prompt returns to the menu or quits. Ctrl+C at any prompt exits cleanly — main menu cancel breaks the loop, sub-prompt cancel returns to the menu with a banner refresh, and CLI-mode cancel calls `process::exit(0)`.
 
 ### Report Module (`src/report/`)
 
@@ -385,7 +422,50 @@ Common utilities:
 
 ## Data Flow
 
-### Interactive Mode Flow
+### Interactive Menu Mode Flow (no arguments)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CLI as main.rs
+    participant Menu as Interactive Menu
+    participant Runner
+    participant CertRunner as cert_ops/runner
+    participant Checks
+    participant Pager
+
+    User->>CLI: ssl-toolkit
+    CLI->>CLI: Show banner
+    loop Menu Loop
+        CLI->>Menu: prompt_main_menu()
+        User->>Menu: Select action
+
+        alt Check a domain
+            Menu->>CLI: CheckDomain
+            CLI->>Menu: prompt_domain(), prompt_port()
+            CLI->>Runner: resolve_dns + run_checks
+            Runner->>Checks: TCP + SSL + Cert + WHOIS
+            Checks-->>Runner: RunResult
+            Runner-->>CLI: RunResult
+            CLI->>Pager: Display in pager
+            User->>Pager: n (new check) → back to menu
+            User->>Pager: q (quit) → post-op prompt
+        else Cert Info / Verify / Convert
+            Menu->>CertRunner: run_cert_*_interactive()
+            CertRunner->>Menu: Prompt for files/options
+            CertRunner->>CertRunner: Process certificates
+            CertRunner->>Pager: Display results in pager
+            User->>Pager: q → post-op prompt
+        else Quit
+            Menu-->>CLI: Break loop
+        end
+
+        CLI->>Menu: prompt_post_operation()
+        User->>Menu: "Run another check" → continue / "Quit" → break
+    end
+```
+
+### Direct CLI Mode Flow (with --domain flag)
 
 ```mermaid
 sequenceDiagram
@@ -411,6 +491,7 @@ sequenceDiagram
     CLI->>Pager: Display results in scrollable pager
     User->>Pager: s (save report)
     Pager-->>User: Report saved
+    User->>Pager: n (re-exec process)
     User->>Pager: q (quit)
 ```
 

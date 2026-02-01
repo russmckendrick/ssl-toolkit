@@ -81,20 +81,18 @@ impl WhoisChecker {
             let domain_clone = domain_owned.clone();
             let timeout_ms = timeout.as_millis() as u64;
             tokio::task::spawn_blocking(move || {
-                let whois = WhoIs::from_string(SERVERS_JSON).map_err(|e| {
-                    WhoisError::LookupFailed {
+                let whois =
+                    WhoIs::from_string(SERVERS_JSON).map_err(|e| WhoisError::LookupFailed {
                         domain: domain_clone.clone(),
                         message: format!("Failed to load WHOIS servers: {}", e),
+                    })?;
+
+                let mut options = WhoIsLookupOptions::from_string(&domain_clone).map_err(|e| {
+                    WhoisError::LookupFailed {
+                        domain: domain_clone.clone(),
+                        message: format!("Invalid domain: {}", e),
                     }
                 })?;
-
-                let mut options =
-                    WhoIsLookupOptions::from_string(&domain_clone).map_err(|e| {
-                        WhoisError::LookupFailed {
-                            domain: domain_clone.clone(),
-                            message: format!("Invalid domain: {}", e),
-                        }
-                    })?;
                 options.timeout = Some(Duration::from_millis(timeout_ms));
 
                 whois.lookup(options).map_err(|e| WhoisError::LookupFailed {
@@ -236,42 +234,18 @@ fn extract_registered_domain(domain: &str) -> String {
 
     // Known two-part TLDs (public suffix approximation)
     let two_part_tlds = [
-        "co.uk", "org.uk", "me.uk", "net.uk", "ac.uk",
-        "co.jp", "or.jp", "ne.jp", "ac.jp",
-        "com.au", "net.au", "org.au", "edu.au",
-        "co.nz", "net.nz", "org.nz",
-        "co.za", "org.za", "web.za",
-        "com.br", "net.br", "org.br",
-        "com.mx", "org.mx", "net.mx",
-        "com.cn", "net.cn", "org.cn",
-        "co.in", "net.in", "org.in",
-        "co.kr", "or.kr", "ne.kr",
-        "com.tw", "org.tw", "net.tw",
-        "com.sg", "net.sg", "org.sg",
-        "com.hk", "net.hk", "org.hk",
-        "co.il", "org.il", "net.il",
-        "com.ar", "net.ar", "org.ar",
-        "com.tr", "net.tr", "org.tr",
-        "co.th", "or.th", "in.th",
-        "com.my", "net.my", "org.my",
-        "co.id", "or.id", "web.id",
-        "com.ph", "net.ph", "org.ph",
-        "com.vn", "net.vn", "org.vn",
-        "co.ke", "or.ke",
-        "com.ng", "net.ng", "org.ng",
-        "co.tz", "or.tz",
-        "com.ua", "net.ua", "org.ua",
-        "com.pl", "net.pl", "org.pl",
-        "co.hu", "org.hu",
-        "com.ro", "org.ro",
-        "co.at", "or.at",
-        "com.de", "org.de",
-        "com.es", "org.es", "nom.es",
-        "com.pt", "org.pt",
-        "co.it",
-        "asso.fr", "nom.fr",
-        "gov.uk", "gov.au", "gov.in", "gov.br",
-        "edu.au", "edu.cn",
+        "co.uk", "org.uk", "me.uk", "net.uk", "ac.uk", "co.jp", "or.jp", "ne.jp", "ac.jp",
+        "com.au", "net.au", "org.au", "edu.au", "co.nz", "net.nz", "org.nz", "co.za", "org.za",
+        "web.za", "com.br", "net.br", "org.br", "com.mx", "org.mx", "net.mx", "com.cn", "net.cn",
+        "org.cn", "co.in", "net.in", "org.in", "co.kr", "or.kr", "ne.kr", "com.tw", "org.tw",
+        "net.tw", "com.sg", "net.sg", "org.sg", "com.hk", "net.hk", "org.hk", "co.il", "org.il",
+        "net.il", "com.ar", "net.ar", "org.ar", "com.tr", "net.tr", "org.tr", "co.th", "or.th",
+        "in.th", "com.my", "net.my", "org.my", "co.id", "or.id", "web.id", "com.ph", "net.ph",
+        "org.ph", "com.vn", "net.vn", "org.vn", "co.ke", "or.ke", "com.ng", "net.ng", "org.ng",
+        "co.tz", "or.tz", "com.ua", "net.ua", "org.ua", "com.pl", "net.pl", "org.pl", "co.hu",
+        "org.hu", "com.ro", "org.ro", "co.at", "or.at", "com.de", "org.de", "com.es", "org.es",
+        "nom.es", "com.pt", "org.pt", "co.it", "asso.fr", "nom.fr", "gov.uk", "gov.au", "gov.in",
+        "gov.br", "edu.au", "edu.cn",
     ];
 
     let lower = domain.to_lowercase();
@@ -302,10 +276,6 @@ fn extract_full_value(line: &str) -> Option<String> {
 
 impl Default for WhoisChecker {
     fn default() -> Self {
-        Self::new(
-            Duration::from_secs(10),
-            3,
-            Duration::from_millis(1000),
-        )
+        Self::new(Duration::from_secs(10), 3, Duration::from_millis(1000))
     }
 }

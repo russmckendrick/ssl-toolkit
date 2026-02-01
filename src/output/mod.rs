@@ -1,6 +1,6 @@
 //! CLI output module
 //!
-//! Replaces the TUI with polished terminal output using console, dialoguer,
+//! Replaces the TUI with polished terminal output using console, inquire,
 //! comfy-table, and indicatif.
 
 pub mod banner;

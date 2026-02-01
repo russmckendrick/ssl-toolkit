@@ -1,6 +1,8 @@
 //! Table rendering using comfy-table
 
-use comfy_table::{presets::UTF8_FULL_CONDENSED, Attribute, Cell, Color, ContentArrangement, Table};
+use comfy_table::{
+    presets::UTF8_FULL_CONDENSED, Attribute, Cell, Color, ContentArrangement, Table,
+};
 
 /// Print a formatted table with headers and rows
 pub fn print_table(headers: &[String], rows: &[Vec<String>]) {

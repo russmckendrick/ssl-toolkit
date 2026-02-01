@@ -1,10 +1,13 @@
 # SSL-Toolkit
 
-A comprehensive SSL/TLS diagnostic tool built in Rust, combining interactive CLI prompts with a ratatui-based pager for viewing results. Performs domain validation, DNS resolution across multiple providers, and SSL certificate analysis with exportable HTML reports.
+A comprehensive SSL/TLS diagnostic tool built in Rust. When run with no arguments, presents an interactive main menu for domain checks and certificate file operations, with all results displayed in a scrollable TUI pager. Also supports direct CLI usage with flags and subcommands for scripting and CI/CD.
 
 ## Features
 
-- **Interactive CLI Mode**: Step-by-step SSL/TLS analysis with dialoguer prompts and scrollable pager
+- **Interactive Main Menu**: Top-level menu offering domain checks, certificate inspection, verification, conversion, and quit — all with results in a scrollable TUI pager, themed with the Tokyo Night Storm palette
+- **Certificate File Operations**: Inspect, verify (key-pair matching and chain validation), and convert (PEM/DER/PKCS#12) certificate files — available from the menu or via the `cert` subcommand
+- **File Path Autocomplete**: Tab-completion on all file path prompts with directories sorted first, dotfile hiding, and cross-platform support
+- **Graceful Ctrl+C Handling**: Clean exit at any prompt with no error messages
 - **Non-Interactive Mode**: Automated checks for scripting and CI/CD pipelines
 - **JSON Output**: Machine-readable output for integration with other tools
 - **Quiet Mode**: Minimal output showing just the overall grade
@@ -47,14 +50,51 @@ cargo install --path .
 
 ## Usage
 
-### Interactive Mode
+### Interactive Menu Mode
 
 ```bash
-# Launch with prompts
+# Launch the interactive menu
 ssl-toolkit
+```
 
-# Launch with pre-filled domain
+This displays a banner and a top-level menu:
+
+```
+? What would you like to do?
+❯ Check a domain
+  Inspect certificate file(s)
+  Verify certificate & key
+  Convert certificate format
+  Quit
+```
+
+Each option prompts for the required inputs, runs the operation, and displays results in the scrollable pager. After each operation you can return to the menu or quit.
+
+### Direct Domain Check
+
+```bash
+# Launch with pre-filled domain (skips menu, goes straight to domain check)
 ssl-toolkit -d example.com
+```
+
+### Certificate File Operations (subcommand)
+
+```bash
+# Inspect certificate file(s)
+ssl-toolkit cert info cert.pem
+ssl-toolkit cert info cert.pem chain.pem --json
+
+# Verify key matches certificate
+ssl-toolkit cert verify --cert cert.pem --key key.pem
+
+# Validate certificate chain
+ssl-toolkit cert verify --chain chain.pem --hostname example.com
+
+# Convert between PEM, DER, and PKCS#12
+ssl-toolkit cert convert cert.pem --to der
+ssl-toolkit cert convert cert.pem --to der -o cert.der
+ssl-toolkit cert convert --to p12 --cert c.pem --key k.pem
+ssl-toolkit cert convert bundle.p12 --to pem --password pass
 ```
 
 ### Non-Interactive Mode
@@ -122,9 +162,9 @@ Configuration files are located in the `config/` directory:
 | `b` / `PageUp` | Page up |
 | `g` / `Home` | Go to start |
 | `G` / `End` | Go to end |
-| `s` | Save report |
-| `n` | Start new check |
-| `q` / `Esc` | Quit |
+| `s` | Save report (opens file explorer prompt with tab-completion) |
+| `n` | New check (clears screen, returns to menu or re-launches) |
+| `q` / `Esc` | Quit pager |
 
 ## Reports
 
@@ -141,10 +181,16 @@ SSL-Toolkit generates self-contained HTML reports that include:
 
 ```
 src/
-├── main.rs              # Entry point & CLI parsing
+├── main.rs              # Entry point, interactive menu loop, CLI dispatch
 ├── lib.rs               # Public API exports
 ├── runner.rs            # Check orchestration engine
-├── cli/                 # Clap argument definitions
+├── cli/                 # Clap argument definitions (+ SubCommand, CertAction)
+├── cert_ops/            # Certificate file operations
+│   ├── reader.rs        # Format detection & certificate reading (PEM/DER/PKCS#12)
+│   ├── key_match.rs     # Private key parsing & cert/key pair matching
+│   ├── chain_verify.rs  # Certificate chain integrity validation
+│   ├── convert.rs       # Format conversion (PEM↔DER↔PKCS#12)
+│   └── runner.rs        # CLI + interactive runners (pager display)
 ├── config/              # Configuration loading (settings, theme, messages)
 ├── checks/              # Core diagnostic modules
 │   ├── dns.rs           # Multi-provider DNS resolution
@@ -155,14 +201,14 @@ src/
 ├── models/              # Data structures
 │   └── cert_comparison.rs # Cross-IP certificate comparison
 ├── output/              # CLI output formatting
-│   ├── banner.rs        # ASCII art banner
-│   ├── interactive.rs   # Dialoguer prompts
+│   ├── banner.rs        # ASCII art banner, screen clear, refresh helpers
+│   ├── interactive.rs   # Inquire prompts, Tokyo Night theme, file path autocomplete
 │   ├── results.rs       # Formatted result display
 │   ├── tables.rs        # Table formatting (comfy-table)
 │   ├── grade.rs         # Grade display (A+ through F)
 │   ├── cert_chain.rs    # Certificate chain visualization
 │   ├── json.rs          # JSON output mode
-│   └── pager.rs         # Ratatui scrollable viewer
+│   └── pager.rs         # Ratatui scrollable viewer (Tokyo Night themed)
 ├── report/              # HTML, iCal, PEM generation
 └── utils/               # Progress indicators, error types
 ```
@@ -173,7 +219,7 @@ Key dependencies:
 - `clap` - CLI parsing
 - `tokio` - Async runtime
 - `ratatui` + `crossterm` - Pager view (scrollable results)
-- `dialoguer` + `console` - Interactive CLI prompts
+- `inquire` + `console` - Interactive CLI prompts (Tokyo Night themed, file path autocomplete)
 - `comfy-table` - Table formatting
 - `hickory-resolver` - DNS resolution
 - `rustls` - Modern TLS (1.2/1.3)

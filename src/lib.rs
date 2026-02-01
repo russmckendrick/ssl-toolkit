@@ -21,6 +21,7 @@
 //! }
 //! ```
 
+pub mod cert_ops;
 pub mod checks;
 pub mod cli;
 pub mod config;

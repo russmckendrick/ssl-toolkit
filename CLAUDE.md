@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-SSL/TLS diagnostic tool built in Rust combining interactive CLI prompts with a ratatui-based pager for output. Performs domain validation, DNS resolution across multiple providers, and SSL certificate analysis with exportable HTML reports.
+SSL/TLS diagnostic tool built in Rust combining an interactive main menu, CLI prompts, and a ratatui-based pager for output. When run with no arguments, presents a top-level menu offering domain checks, certificate file inspection, verification, and conversion. All operations display results in the scrollable TUI pager. Also supports direct CLI usage with flags and subcommands for non-interactive workflows.
 
 ## Quick Reference
 
@@ -19,21 +19,59 @@ cargo doc --open   # Generate docs
 ### Build & Run
 
 ```bash
-cargo run -- --domain example.com                  # Interactive mode
-cargo run -- --domain example.com --non-interactive # Non-interactive mode
-cargo run -- --domain example.com --json            # JSON output
-cargo run -- --domain example.com --quiet           # Quiet mode (grade only)
-cargo run -- --help                                 # Show options
+cargo run --                                        # Interactive menu mode
+cargo run -- --domain example.com                   # Direct domain check (interactive)
+cargo run -- --domain example.com --non-interactive  # Non-interactive mode
+cargo run -- --domain example.com --json             # JSON output
+cargo run -- --domain example.com --quiet            # Quiet mode (grade only)
+cargo run -- --help                                  # Show options
+```
+
+### Interactive Menu Mode (no arguments)
+
+Running `ssl-toolkit` with no arguments and a TTY shows a top-level menu:
+
+```
+? What would you like to do?
+❯ Check a domain
+  Inspect certificate file(s)
+  Verify certificate & key
+  Convert certificate format
+  Quit
+```
+
+Each option prompts for the required inputs (domain, files, etc.), runs the operation, and displays results in the ratatui pager. After each operation, a post-operation prompt offers "Run another check" or "Quit".
+
+For domain checks, the pager `n` key returns directly to the main menu. For cert operations, quitting the pager shows the post-operation prompt.
+
+### Certificate File Operations (`cert` subcommand)
+
+```bash
+cargo run -- cert info cert.pem                                    # Inspect cert file(s)
+cargo run -- cert info cert.pem chain.pem --json                   # JSON output
+cargo run -- cert verify --cert cert.pem --key key.pem             # Check key matches cert
+cargo run -- cert verify --chain chain.pem --hostname example.com  # Validate chain
+cargo run -- cert convert cert.pem --to der                        # PEM → DER
+cargo run -- cert convert cert.pem --to der -o cert.der            # Explicit output path
+cargo run -- cert convert --to p12 --cert c.pem --key k.pem        # PEM → PKCS#12
+cargo run -- cert convert bundle.p12 --to pem --password pass      # PKCS#12 → PEM
 ```
 
 ## Architecture
 
 ```
 src/
-├── main.rs              # Entry point & CLI parsing
+├── main.rs              # Entry point, interactive menu loop, CLI dispatch
 ├── lib.rs               # Public API exports
 ├── runner.rs            # Check orchestration engine
-├── cli/args.rs          # Clap argument definitions
+├── cli/args.rs          # Clap argument definitions (+ SubCommand, CertAction enums)
+├── cert_ops/            # Certificate file operations
+│   ├── mod.rs           # Module declarations
+│   ├── reader.rs        # Format detection & certificate reading (PEM/DER/PKCS#12)
+│   ├── key_match.rs     # Private key parsing & cert/key pair matching
+│   ├── chain_verify.rs  # Certificate chain integrity validation
+│   ├── convert.rs       # Format conversion (PEM↔DER↔PKCS#12)
+│   └── runner.rs        # Orchestrates cert info/verify/convert (CLI + interactive/pager)
 ├── config/              # Configuration loading
 │   ├── mod.rs
 │   ├── settings.rs      # DNS providers, SSL timeouts, WHOIS settings
@@ -53,14 +91,14 @@ src/
 │   ├── test_result.rs
 │   └── report_card.rs
 ├── output/              # CLI output formatting
-│   ├── banner.rs        # ASCII art banner
-│   ├── interactive.rs   # Dialoguer prompts (domain, IP, port)
+│   ├── banner.rs        # ASCII art banner, screen clear, refresh helpers
+│   ├── interactive.rs   # Inquire prompts, Tokyo Night theme, file path autocomplete
 │   ├── results.rs       # Formatted result display
 │   ├── tables.rs        # Table formatting (comfy-table)
 │   ├── grade.rs         # Grade display (A+ through F)
 │   ├── cert_chain.rs    # Certificate chain visualization
 │   ├── json.rs          # JSON output mode
-│   └── pager.rs         # Ratatui scrollable viewer
+│   └── pager.rs         # Ratatui scrollable viewer (Tokyo Night themed)
 ├── report/              # HTML, iCal, PEM generation
 └── utils/               # Progress indicators, error types
 ```
@@ -72,7 +110,7 @@ src/
 | `clap` | CLI parsing (derive macros) |
 | `tokio` | Async runtime (full features) |
 | `ratatui` + `crossterm` | Pager view (scrollable results) |
-| `dialoguer` + `console` | Interactive CLI prompts |
+| `inquire` + `console` | Interactive CLI prompts (with file path tab-completion) |
 | `comfy-table` | Table formatting |
 | `hickory-resolver` | Async DNS resolution |
 | `rustls` | Modern TLS (TLS 1.2/1.3) |
@@ -86,6 +124,11 @@ src/
 | `indicatif` | Progress indicators |
 | `base64` | PEM/data URI encoding |
 | `whois-rust` | WHOIS lookups (node-whois servers.json) |
+| `pem` | PEM block parsing (CERTIFICATE, PRIVATE KEY) |
+| `pkcs8` | Private key parsing (PKCS#8) |
+| `rsa` | RSA key matching |
+| `p256` / `p384` | EC key matching (P-256, P-384) |
+| `p12-keystore` | PKCS#12 read/write (pure Rust) |
 | `ansi-to-tui` | ANSI text in ratatui pager |
 | `tracing` | Structured logging |
 | `thiserror` + `anyhow` | Error handling |
@@ -275,7 +318,7 @@ git push origin v0.1.0
 2. **Update docs at every step** - Keep documentation current
 3. **Prefer editing over creating** - Modify existing files when possible
 4. **Test on multiple platforms** - macOS, Linux, Windows
-5. **Pager keys**: `↑/k` (up), `↓/j` (down), `s` (save), `n` (new check), `q` (quit)
+5. **Pager keys**: `↑/k` (up), `↓/j` (down), `Space` (page down), `b` (page up), `g`/`G` (top/bottom), `s` (save report via file explorer prompt), `n` (new check / back to menu), `q` (quit pager). The pager uses Tokyo Night Storm colours and is used for both domain check results and certificate file operation results.
 6. **Handle network timeouts gracefully** - Use mock servers in tests
 7. **Implement WHOIS rate limiting** - Caching + exponential backoff
 
@@ -287,3 +330,5 @@ git push origin v0.1.0
 - Correct border alignment across terminals
 - HTML reports work in major browsers
 - >80% code coverage on core modules
+- Ctrl+C at any prompt exits cleanly (no error messages)
+- All interactive prompts use Tokyo Night Storm theme

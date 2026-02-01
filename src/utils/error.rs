@@ -30,6 +30,9 @@ pub enum ToolkitError {
     #[error("WHOIS lookup error: {0}")]
     Whois(#[from] WhoisError),
 
+    #[error("Certificate file operation error: {0}")]
+    CertFile(#[from] CertFileError),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -178,6 +181,31 @@ pub enum WhoisError {
 
     #[error("WHOIS connection timed out for {domain}")]
     Timeout { domain: String },
+}
+
+/// Certificate file operation errors
+#[derive(Error, Debug)]
+pub enum CertFileError {
+    #[error("Failed to read file {path}: {message}")]
+    FileReadError { path: String, message: String },
+
+    #[error("Private key does not match certificate")]
+    KeyMismatch,
+
+    #[error("Unsupported format: {format}")]
+    UnsupportedFormat { format: String },
+
+    #[error("Format conversion failed: {message}")]
+    ConversionError { message: String },
+
+    #[error("PKCS#12 error: {message}")]
+    Pkcs12Error { message: String },
+
+    #[error("Private key parse error: {message}")]
+    KeyParseError { message: String },
+
+    #[error("Chain validation failed: {message}")]
+    ChainError { message: String },
 }
 
 /// Result type alias using ToolkitError
