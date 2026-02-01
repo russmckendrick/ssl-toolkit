@@ -6,10 +6,13 @@
 use crate::cert_ops::{chain_verify, convert, key_match, reader};
 use crate::checks::CertificateChecker;
 use crate::cli::{CertConvertArgs, CertFormat, CertInfoArgs, CertVerifyArgs};
-use crate::models::{CheckStatus, DetailSection, TestResult, TestStep};
+use crate::config;
+use crate::models::{CertificateInfo, CheckStatus, DetailSection, TestResult, TestStep};
 use crate::output::interactive::{self, CertVerifyMode};
 use crate::output::{pager, results};
+use crate::report::{html::CertOpsReportData, HtmlReport};
 use crate::utils::CertFileError;
+use chrono::Local;
 use console::style;
 use std::path::{Path, PathBuf};
 
@@ -91,9 +94,10 @@ fn read_certs_with_password_prompt(
 fn collect_cert_info(
     files: &[PathBuf],
     password: Option<&str>,
-) -> Result<Vec<TestResult>, anyhow::Error> {
+) -> Result<(Vec<TestResult>, Vec<CertificateInfo>), anyhow::Error> {
     let checker = CertificateChecker::new();
     let mut all_results: Vec<TestResult> = Vec::new();
+    let mut all_certs: Vec<CertificateInfo> = Vec::new();
 
     for file in files {
         let (certs, format) = read_certs_with_password_prompt(file, password)?;
@@ -216,16 +220,17 @@ fn collect_cert_info(
                     .push("RSA key size is below 2048 bits - consider upgrading".to_string());
             }
 
+            all_certs.push(info);
             all_results.push(result);
         }
     }
 
-    Ok(all_results)
+    Ok((all_results, all_certs))
 }
 
 /// Run the `cert info` command
 pub fn run_cert_info(args: &CertInfoArgs) -> Result<(), anyhow::Error> {
-    let all_results = collect_cert_info(&args.files, args.password.as_deref())?;
+    let (all_results, _) = collect_cert_info(&args.files, args.password.as_deref())?;
 
     if args.json {
         let json = serde_json::to_string_pretty(&all_results)?;
@@ -240,14 +245,23 @@ pub fn run_cert_info(args: &CertInfoArgs) -> Result<(), anyhow::Error> {
 }
 
 /// Collect cert verify results without printing.
-fn collect_cert_verify(args: &CertVerifyArgs) -> Result<Vec<TestResult>, anyhow::Error> {
+fn collect_cert_verify(
+    args: &CertVerifyArgs,
+) -> Result<(Vec<TestResult>, Vec<CertificateInfo>), anyhow::Error> {
+    let checker = CertificateChecker::new();
     let mut all_results: Vec<TestResult> = Vec::new();
+    let mut all_certs: Vec<CertificateInfo> = Vec::new();
 
     // Key matching mode: --cert and --key
     if let (Some(cert_path), Some(key_path)) = (&args.cert, &args.key) {
         let certs = reader::read_certificates(cert_path, None)?;
         if certs.is_empty() {
             anyhow::bail!("No certificates found in {}", cert_path.display());
+        }
+
+        // Parse the leaf cert for report data
+        if let Ok(info) = checker.parse_certificate(&certs[0]) {
+            all_certs.push(info);
         }
 
         let key_info = key_match::read_private_key(key_path)?;
@@ -295,6 +309,16 @@ fn collect_cert_verify(args: &CertVerifyArgs) -> Result<Vec<TestResult>, anyhow:
     // Chain validation mode: --chain
     if let Some(chain_path) = &args.chain {
         let certs = reader::read_certificates(chain_path, None)?;
+
+        // Parse the leaf cert for report data
+        if let Some(first) = certs.first() {
+            if let Ok(info) = checker.parse_certificate(first) {
+                if all_certs.is_empty() {
+                    all_certs.push(info);
+                }
+            }
+        }
+
         let validation = chain_verify::verify_chain(&certs, args.hostname.as_deref())?;
 
         let status = if validation.is_valid {
@@ -339,14 +363,14 @@ fn collect_cert_verify(args: &CertVerifyArgs) -> Result<Vec<TestResult>, anyhow:
         );
     }
 
-    Ok(all_results)
+    Ok((all_results, all_certs))
 }
 
 /// Run the `cert verify` command.
 ///
 /// Returns `Ok(true)` if all checks passed, `Ok(false)` if any failed.
 pub fn run_cert_verify(args: &CertVerifyArgs) -> Result<bool, anyhow::Error> {
-    let all_results = collect_cert_verify(args)?;
+    let (all_results, _) = collect_cert_verify(args)?;
 
     if args.json {
         let json = serde_json::to_string_pretty(&all_results)?;
@@ -482,10 +506,31 @@ fn display_in_pager(header: &str, content: &str) {
     pager::display_paged(header, content, no_save);
 }
 
+/// Generate a default filename for a cert ops HTML report.
+fn generate_cert_default_filename(files: &[String]) -> String {
+    let stem = if let Some(first) = files.first() {
+        Path::new(first)
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "cert".to_string())
+    } else {
+        "cert".to_string()
+    };
+    let now = Local::now();
+    format!("cert-report-{}-{}.html", stem, now.format("%Y-%m-%d-%H%M"))
+}
+
+/// Load theme config (same fallback as main.rs).
+fn load_theme() -> config::Theme {
+    config::load_default_config()
+        .map(|(_, theme, _)| theme)
+        .unwrap_or_default()
+}
+
 /// Run cert info interactively (prompt for files, display in pager)
 pub fn run_cert_info_interactive() -> Result<(), anyhow::Error> {
     let files = interactive::prompt_cert_info_interactive()?;
-    let all_results = collect_cert_info(&files, None)?;
+    let (all_results, cert_infos) = collect_cert_info(&files, None)?;
 
     let header = if files.len() == 1 {
         format!("Certificate Info: {}", files[0].display())
@@ -493,21 +538,46 @@ pub fn run_cert_info_interactive() -> Result<(), anyhow::Error> {
         format!("Certificate Info: {} files", files.len())
     };
 
+    let source_files: Vec<String> = files.iter().map(|f| f.display().to_string()).collect();
     let output = format_results_for_pager(&all_results);
-    display_in_pager(&header, &output);
+
+    let theme = load_theme();
+    let report_data = CertOpsReportData {
+        title: header.clone(),
+        results: all_results,
+        certificates: cert_infos,
+        source_files: source_files.clone(),
+    };
+
+    let on_save = move |input: Option<String>| -> Result<Option<String>, String> {
+        let default_filename = generate_cert_default_filename(&source_files);
+        let path = match input {
+            Some(s) if !s.trim().is_empty() => s,
+            _ => default_filename,
+        };
+        let report = HtmlReport::new(theme.clone());
+        let output_path = PathBuf::from(&path);
+        report
+            .generate_cert_report(&report_data, &output_path)
+            .map(|_| Some(path))
+            .map_err(|e| e.to_string())
+    };
+
+    pager::display_paged(&header, &output, on_save);
     Ok(())
 }
 
 /// Run cert verify interactively (prompt for mode and files, display in pager)
 pub fn run_cert_verify_interactive() -> Result<(), anyhow::Error> {
     let mode = interactive::prompt_cert_verify_interactive()?;
-    let (args, header) = match mode {
+    let (args, header, source_files) = match mode {
         CertVerifyMode::KeyMatch { cert, key } => {
             let h = format!(
                 "Key Pair Verification: {} + {}",
                 cert.display(),
                 key.display()
             );
+            let sf = vec![cert.display().to_string(), key.display().to_string()];
             (
                 CertVerifyArgs {
                     cert: Some(cert),
@@ -517,10 +587,12 @@ pub fn run_cert_verify_interactive() -> Result<(), anyhow::Error> {
                     json: false,
                 },
                 h,
+                sf,
             )
         }
         CertVerifyMode::ChainValidation { chain, hostname } => {
             let h = format!("Chain Validation: {}", chain.display());
+            let sf = vec![chain.display().to_string()];
             (
                 CertVerifyArgs {
                     cert: None,
@@ -530,13 +602,37 @@ pub fn run_cert_verify_interactive() -> Result<(), anyhow::Error> {
                     json: false,
                 },
                 h,
+                sf,
             )
         }
     };
 
-    let all_results = collect_cert_verify(&args)?;
+    let (all_results, cert_infos) = collect_cert_verify(&args)?;
     let output = format_results_for_pager(&all_results);
-    display_in_pager(&header, &output);
+
+    let theme = load_theme();
+    let report_data = CertOpsReportData {
+        title: header.clone(),
+        results: all_results,
+        certificates: cert_infos,
+        source_files: source_files.clone(),
+    };
+
+    let on_save = move |input: Option<String>| -> Result<Option<String>, String> {
+        let default_filename = generate_cert_default_filename(&source_files);
+        let path = match input {
+            Some(s) if !s.trim().is_empty() => s,
+            _ => default_filename,
+        };
+        let report = HtmlReport::new(theme.clone());
+        let output_path = PathBuf::from(&path);
+        report
+            .generate_cert_report(&report_data, &output_path)
+            .map(|_| Some(path))
+            .map_err(|e| e.to_string())
+    };
+
+    pager::display_paged(&header, &output, on_save);
     Ok(())
 }
 

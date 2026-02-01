@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        :root {
+            --pass: {{ pass_color }};
+            --fail: {{ fail_color }};
+            --warning: {{ warning_color }};
+            --primary: {{ primary_color }};
+            --bg: #1a1a2e;
+            --card-bg: #16213e;
+            --text: #eaeaea;
+            --text-muted: #8892a0;
+            --border: #0f3460;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+
+        .container { max-width: 900px; margin: 0 auto; }
+
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--border);
+        }
+
+        h1 { color: var(--primary); font-size: 1.75rem; margin-bottom: 0.5rem; }
+
+        .source-files {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            font-family: monospace;
+            margin-bottom: 0.25rem;
+        }
+
+        .timestamp { color: var(--text-muted); font-size: 0.85rem; }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border);
+        }
+
+        .card h2 {
+            color: var(--primary);
+            margin-bottom: 1rem;
+            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .check-card { margin-bottom: 1.5rem; }
+        .check-card:last-child { margin-bottom: 0; }
+
+        .check-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .check-icon { font-size: 1.1rem; width: 1.5rem; text-align: center; }
+        .check-title { font-weight: 600; font-size: 1.05rem; }
+        .check-summary { font-size: 0.85rem; margin-left: auto; }
+
+        .test-steps {
+            margin-left: 1.75rem;
+            border-left: 2px solid var(--border);
+            padding-left: 1rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .test-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+            padding: 0.35rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .test-step:last-child { border-bottom: none; }
+
+        .step-icon { width: 1rem; text-align: center; flex-shrink: 0; font-size: 0.85rem; margin-top: 0.1rem; }
+        .step-desc { font-size: 0.9rem; }
+
+        .step-details {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            margin-left: 1.5rem;
+            margin-top: 0.15rem;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .info-item {
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+
+        .info-item.full-width { grid-column: 1 / -1; }
+
+        .info-label {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .info-value { font-size: 1rem; word-break: break-all; }
+
+        .san-list { list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+        .san-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        .detail-section { margin-bottom: 1rem; }
+        .detail-section:last-child { margin-bottom: 0; }
+        .detail-title { color: var(--primary); font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem; }
+
+        .note-text {
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 4px;
+            border-left: 3px solid var(--border);
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .recommendations-list { list-style: none; }
+
+        .recommendation-item {
+            padding: 0.6rem 0.75rem;
+            margin-bottom: 0.5rem;
+            border-left: 3px solid var(--warning);
+            background: rgba(245, 158, 11, 0.08);
+            border-radius: 0 4px 4px 0;
+            font-size: 0.9rem;
+        }
+
+        .recommendation-item:last-child { margin-bottom: 0; }
+
+        .downloads { display: flex; gap: 1rem; flex-wrap: wrap; }
+
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            background: var(--primary);
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            transition: opacity 0.2s;
+        }
+
+        .download-btn:hover { opacity: 0.9; }
+
+        footer {
+            text-align: center;
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        @media (max-width: 600px) {
+            body { padding: 1rem; }
+            .info-grid { grid-template-columns: 1fr; }
+            .check-header { flex-wrap: wrap; }
+            .check-summary { margin-left: 1.75rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>{{ title }}</h1>
+            {% if has_source_files %}
+            <p class="source-files">
+                {% for f in source_files %}{{ f }}{% if not loop.last %}, {% endif %}{% endfor %}
+            </p>
+            {% endif %}
+            <p class="timestamp">Generated: {{ timestamp }}</p>
+        </header>
+
+        {# ── Check Results ── #}
+        {% for check in check_results %}
+        <div class="card">
+            <div class="check-card">
+                <div class="check-header">
+                    <span class="check-icon" style="color: {{ check.status_color }};">{{ check.status_icon }}</span>
+                    <span class="check-title">{{ check.title }}</span>
+                    <span class="check-summary" style="color: {{ check.status_color }};">{{ check.summary }}</span>
+                </div>
+
+                {% if check.has_steps %}
+                <div class="test-steps">
+                    {% for step in check.steps %}
+                    <div class="test-step">
+                        <span class="step-icon" style="color: {{ step.status_color }};">{{ step.status_icon }}</span>
+                        <span class="step-desc">{{ step.description }}</span>
+                    </div>
+                    {% if step.has_details %}
+                    <div class="step-details">{{ step.details }}</div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if check.has_details %}
+                {% for detail in check.details %}
+                {% if detail.kind == "key_value" %}
+                <div class="detail-section">
+                    {% if detail.has_title %}<div class="detail-title">{{ detail.title }}</div>{% endif %}
+                    <div class="info-grid">
+                        {% for item in detail.items %}
+                        <div class="info-item{% if item.label == 'SHA-256' or item.label == 'Serial' %} full-width{% endif %}">
+                            <div class="info-label">{{ item.label }}</div>
+                            <div class="info-value">{{ item.value }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% elif detail.kind == "list" %}
+                <div class="detail-section">
+                    {% if detail.has_title %}<div class="detail-title">{{ detail.title }}</div>{% endif %}
+                    <ul class="san-list">
+                        {% for item in detail.items %}
+                        <li class="san-item">{{ item }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% elif detail.kind == "text" %}
+                <div class="detail-section">
+                    {% if detail.has_title %}<div class="detail-title">{{ detail.title }}</div>{% endif %}
+                    <div class="note-text">{{ detail.content }}</div>
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% endif %}
+
+                {% if check.has_recommendations %}
+                <div class="detail-section">
+                    <div class="detail-title">Recommendations</div>
+                    <ul class="recommendations-list">
+                        {% for rec in check.recommendations %}
+                        <li class="recommendation-item">{{ rec }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+
+        {# ── Downloads ── #}
+        {% if has_ical_downloads %}
+        <div class="card">
+            <h2>Downloads</h2>
+            <div class="downloads">
+                {% for dl in ical_downloads %}
+                <a href="data:text/calendar;base64,{{ dl.ical_base64 }}"
+                   download="{{ dl.filename }}"
+                   class="download-btn">
+                    Expiry Reminder: {{ dl.label }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <footer>
+            <p>Generated by SSL-Toolkit</p>
+        </footer>
+    </div>
+</body>
+</html>
