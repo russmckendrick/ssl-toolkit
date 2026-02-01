@@ -87,13 +87,16 @@ fn read_certs_with_password_prompt(
     }
 }
 
-/// Run the `cert info` command
-pub fn run_cert_info(args: &CertInfoArgs) -> Result<(), anyhow::Error> {
+/// Collect cert info results without printing.
+fn collect_cert_info(
+    files: &[PathBuf],
+    password: Option<&str>,
+) -> Result<Vec<TestResult>, anyhow::Error> {
     let checker = CertificateChecker::new();
     let mut all_results: Vec<TestResult> = Vec::new();
 
-    for file in &args.files {
-        let (certs, format) = read_certs_with_password_prompt(file, args.password.as_deref())?;
+    for file in files {
+        let (certs, format) = read_certs_with_password_prompt(file, password)?;
 
         for (i, der) in certs.iter().enumerate() {
             let info = checker.parse_certificate(der)?;
@@ -217,6 +220,13 @@ pub fn run_cert_info(args: &CertInfoArgs) -> Result<(), anyhow::Error> {
         }
     }
 
+    Ok(all_results)
+}
+
+/// Run the `cert info` command
+pub fn run_cert_info(args: &CertInfoArgs) -> Result<(), anyhow::Error> {
+    let all_results = collect_cert_info(&args.files, args.password.as_deref())?;
+
     if args.json {
         let json = serde_json::to_string_pretty(&all_results)?;
         println!("{}", json);
@@ -229,10 +239,8 @@ pub fn run_cert_info(args: &CertInfoArgs) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-/// Run the `cert verify` command.
-///
-/// Returns `Ok(true)` if all checks passed, `Ok(false)` if any failed.
-pub fn run_cert_verify(args: &CertVerifyArgs) -> Result<bool, anyhow::Error> {
+/// Collect cert verify results without printing.
+fn collect_cert_verify(args: &CertVerifyArgs) -> Result<Vec<TestResult>, anyhow::Error> {
     let mut all_results: Vec<TestResult> = Vec::new();
 
     // Key matching mode: --cert and --key
@@ -330,6 +338,15 @@ pub fn run_cert_verify(args: &CertVerifyArgs) -> Result<bool, anyhow::Error> {
             "Please specify --cert and --key for key matching, or --chain for chain validation"
         );
     }
+
+    Ok(all_results)
+}
+
+/// Run the `cert verify` command.
+///
+/// Returns `Ok(true)` if all checks passed, `Ok(false)` if any failed.
+pub fn run_cert_verify(args: &CertVerifyArgs) -> Result<bool, anyhow::Error> {
+    let all_results = collect_cert_verify(args)?;
 
     if args.json {
         let json = serde_json::to_string_pretty(&all_results)?;
@@ -450,43 +467,83 @@ pub fn run_cert_convert(args: &CertConvertArgs) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-/// Run cert info interactively (prompt for files, then delegate)
-pub fn run_cert_info_interactive() -> Result<(), anyhow::Error> {
-    let files = interactive::prompt_cert_info_interactive()?;
-    let args = CertInfoArgs {
-        files,
-        json: false,
-        password: None,
-    };
-    run_cert_info(&args)
+/// Format a list of TestResults into a string for the pager.
+fn format_results_for_pager(test_results: &[TestResult]) -> String {
+    let mut output = String::new();
+    for result in test_results {
+        output.push_str(&results::format_test_result(result, true));
+    }
+    output
 }
 
-/// Run cert verify interactively (prompt for mode and files, then delegate)
-pub fn run_cert_verify_interactive() -> Result<(), anyhow::Error> {
-    let mode = interactive::prompt_cert_verify_interactive()?;
-    let args = match mode {
-        CertVerifyMode::KeyMatch { cert, key } => CertVerifyArgs {
-            cert: Some(cert),
-            key: Some(key),
-            chain: None,
-            hostname: None,
-            json: false,
-        },
-        CertVerifyMode::ChainValidation { chain, hostname } => CertVerifyArgs {
-            cert: None,
-            key: None,
-            chain: Some(chain),
-            hostname,
-            json: false,
-        },
+/// Display content in the pager (no save support for cert ops).
+fn display_in_pager(header: &str, content: &str) {
+    let no_save = |_: Option<String>| -> Result<Option<String>, String> { Ok(None) };
+    pager::display_paged(header, content, no_save);
+}
+
+/// Run cert info interactively (prompt for files, display in pager)
+pub fn run_cert_info_interactive() -> Result<(), anyhow::Error> {
+    let files = interactive::prompt_cert_info_interactive()?;
+    let all_results = collect_cert_info(&files, None)?;
+
+    let header = if files.len() == 1 {
+        format!("Certificate Info: {}", files[0].display())
+    } else {
+        format!("Certificate Info: {} files", files.len())
     };
-    let _passed = run_cert_verify(&args)?;
+
+    let output = format_results_for_pager(&all_results);
+    display_in_pager(&header, &output);
     Ok(())
 }
 
-/// Run cert convert interactively (prompt for params, then delegate)
+/// Run cert verify interactively (prompt for mode and files, display in pager)
+pub fn run_cert_verify_interactive() -> Result<(), anyhow::Error> {
+    let mode = interactive::prompt_cert_verify_interactive()?;
+    let (args, header) = match mode {
+        CertVerifyMode::KeyMatch { cert, key } => {
+            let h = format!(
+                "Key Pair Verification: {} + {}",
+                cert.display(),
+                key.display()
+            );
+            (
+                CertVerifyArgs {
+                    cert: Some(cert),
+                    key: Some(key),
+                    chain: None,
+                    hostname: None,
+                    json: false,
+                },
+                h,
+            )
+        }
+        CertVerifyMode::ChainValidation { chain, hostname } => {
+            let h = format!("Chain Validation: {}", chain.display());
+            (
+                CertVerifyArgs {
+                    cert: None,
+                    key: None,
+                    chain: Some(chain),
+                    hostname,
+                    json: false,
+                },
+                h,
+            )
+        }
+    };
+
+    let all_results = collect_cert_verify(&args)?;
+    let output = format_results_for_pager(&all_results);
+    display_in_pager(&header, &output);
+    Ok(())
+}
+
+/// Run cert convert interactively (prompt for params, display result in pager)
 pub fn run_cert_convert_interactive() -> Result<(), anyhow::Error> {
     let params = interactive::prompt_cert_convert_interactive()?;
+    let input_display = params.input.display().to_string();
     let args = CertConvertArgs {
         input: Some(params.input),
         to: params.target_format,
@@ -495,5 +552,21 @@ pub fn run_cert_convert_interactive() -> Result<(), anyhow::Error> {
         key: params.key,
         password: params.password,
     };
-    run_cert_convert(&args)
+
+    // Run conversion (prints success message to stdout)
+    run_cert_convert(&args)?;
+
+    // For convert, show a brief result in the pager with the converted file info
+    let mut result = TestResult::new(
+        "Certificate Conversion",
+        CheckStatus::Pass,
+        "Conversion complete",
+    );
+    result.details.push(DetailSection::key_value(
+        Some("Details".to_string()),
+        vec![("Input".to_string(), input_display)],
+    ));
+    let output = format_results_for_pager(&[result]);
+    display_in_pager("Certificate Conversion", &output);
+    Ok(())
 }

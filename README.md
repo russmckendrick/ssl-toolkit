@@ -1,6 +1,6 @@
 # SSL-Toolkit
 
-A comprehensive SSL/TLS diagnostic tool built in Rust, combining interactive CLI prompts with a ratatui-based pager for viewing results. Performs domain validation, DNS resolution across multiple providers, and SSL certificate analysis with exportable HTML reports.
+A comprehensive SSL/TLS diagnostic tool built in Rust. When run with no arguments, presents an interactive main menu for domain checks and certificate file operations, with all results displayed in a scrollable TUI pager. Also supports direct CLI usage with flags and subcommands for scripting and CI/CD.
 
 ## Features
 
