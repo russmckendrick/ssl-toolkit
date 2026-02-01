@@ -3,11 +3,14 @@
 //! Extracts the check orchestration logic from the TUI app into a standalone
 //! async engine that can be driven by any frontend (CLI, TUI, etc.).
 
-use crate::checks::{CertificateChecker, DnsChecker, SslChecker, TcpChecker, WhoisChecker};
+use crate::checks::{
+    CertificateChecker, DnsChecker, OcspChecker, SslChecker, TcpChecker, WhoisChecker,
+};
 use crate::config::Settings;
 use crate::models::{
     CertComparison, CertificateInfo, CheckStatus, CipherSuite, DetailSection, DnsResult,
-    ReportCard, SslInfo, TestResult, TestStep,
+    ReportCard, RevocationCheckMethod, RevocationInfo, RevocationStatus, SslInfo, TestResult,
+    TestStep,
 };
 use anyhow::Result;
 use std::net::IpAddr;
@@ -41,6 +44,10 @@ pub enum CheckEvent {
     CertStarted,
     CertComplete {
         days: i64,
+    },
+    RevocationStarted,
+    RevocationComplete {
+        status: String,
     },
     ComparisonStarted {
         current: usize,
@@ -108,11 +115,105 @@ pub async fn run_checks(
     // Certificate Check
     on_event(CheckEvent::CertStarted);
     let cert_checker = CertificateChecker::new();
-    let cert_info = cert_checker
+    let mut cert_info = cert_checker
         .analyze(&ssl_info.certificate_chain)
         .map_err(|e| anyhow::anyhow!("Certificate analysis failed: {}", e))?;
     let days = cert_info.days_until_expiry();
     on_event(CheckEvent::CertComplete { days });
+
+    // Revocation Check (OCSP)
+    if config.settings.ssl.check_revocation {
+        on_event(CheckEvent::RevocationStarted);
+        let ocsp_checker = OcspChecker::new(config.settings.ssl.ocsp_timeout());
+
+        let issuer_der = if ssl_info.certificate_chain.len() > 1 {
+            Some(&ssl_info.certificate_chain[1])
+        } else {
+            None
+        };
+
+        let revocation_result = if !ssl_info.ocsp_response.is_empty() {
+            // Try stapled OCSP response first
+            if let Some(issuer) = issuer_der {
+                ocsp_checker
+                    .check_stapled(&ssl_info.ocsp_response, &cert_info.raw_der, issuer)
+                    .ok()
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let revocation_result = if revocation_result.is_none() {
+            // Fall back to direct OCSP request
+            if let Some(ref responder_url) = cert_info.ocsp_responder_url {
+                if let Some(issuer) = issuer_der {
+                    match ocsp_checker
+                        .check_direct(&cert_info.raw_der, issuer, responder_url)
+                        .await
+                    {
+                        Ok(info) => Some(info),
+                        Err(e) => {
+                            tracing::warn!("OCSP direct check failed: {}", e);
+                            Some(RevocationInfo {
+                                status: RevocationStatus::Unknown {
+                                    reason: format!("OCSP check failed: {}", e),
+                                },
+                                method: RevocationCheckMethod::OcspDirect,
+                                ocsp_responder_url: Some(responder_url.clone()),
+                                stapled: false,
+                            })
+                        }
+                    }
+                } else {
+                    Some(RevocationInfo {
+                        status: RevocationStatus::Unknown {
+                            reason: "No issuer certificate in chain".to_string(),
+                        },
+                        method: RevocationCheckMethod::None,
+                        ocsp_responder_url: Some(responder_url.clone()),
+                        stapled: false,
+                    })
+                }
+            } else if let Some(crl_url) = cert_info.crl_distribution_points.first() {
+                // No OCSP responder URL — fall back to CRL check
+                match ocsp_checker.check_crl(&cert_info.raw_der, crl_url).await {
+                    Ok(info) => Some(info),
+                    Err(e) => {
+                        tracing::warn!("CRL check failed: {}", e);
+                        Some(RevocationInfo {
+                            status: RevocationStatus::Unknown {
+                                reason: format!("CRL check failed: {}", e),
+                            },
+                            method: RevocationCheckMethod::Crl,
+                            ocsp_responder_url: None,
+                            stapled: false,
+                        })
+                    }
+                }
+            } else {
+                Some(RevocationInfo {
+                    status: RevocationStatus::Unknown {
+                        reason: "No OCSP responder URL or CRL distribution point in certificate"
+                            .to_string(),
+                    },
+                    method: RevocationCheckMethod::None,
+                    ocsp_responder_url: None,
+                    stapled: false,
+                })
+            }
+        } else {
+            revocation_result
+        };
+
+        if let Some(ref rev_info) = revocation_result {
+            on_event(CheckEvent::RevocationComplete {
+                status: rev_info.status.to_string(),
+            });
+        }
+        cert_info.revocation = revocation_result;
+    }
 
     // Build report card
     let mut report = ReportCard::new(domain.clone(), ip.to_string(), port);
@@ -296,7 +397,14 @@ pub async fn run_checks(
 
     // Certificate Test Result
     let hostname_valid = cert_info.matches_hostname(domain);
-    let cert_status = if days < 0 || !hostname_valid {
+    let is_revoked = matches!(
+        cert_info.revocation,
+        Some(RevocationInfo {
+            status: RevocationStatus::Revoked { .. },
+            ..
+        })
+    );
+    let cert_status = if days < 0 || !hostname_valid || is_revoked {
         CheckStatus::Fail
     } else if days <= 30 || cert_info.is_self_signed || !ssl_info.trust_verified {
         CheckStatus::Warning
@@ -411,6 +519,61 @@ pub async fn run_checks(
             "Ensure the certificate chain includes all intermediate certificates from a trusted CA"
                 .to_string(),
         );
+    }
+
+    // Revocation status
+    if let Some(ref rev_info) = cert_info.revocation {
+        cert_test_result = cert_test_result.with_detail(DetailSection::key_value(
+            Some("Revocation Status".to_string()),
+            {
+                let mut pairs = vec![
+                    ("Status".to_string(), rev_info.status.to_string()),
+                    ("Check Method".to_string(), rev_info.method.to_string()),
+                ];
+                if let Some(ref url) = rev_info.ocsp_responder_url {
+                    pairs.push(("OCSP Responder".to_string(), url.clone()));
+                }
+                if rev_info.stapled {
+                    pairs.push(("OCSP Stapling".to_string(), "Yes".to_string()));
+                }
+                pairs
+            },
+        ));
+
+        match &rev_info.status {
+            RevocationStatus::Good => {
+                cert_test_result =
+                    cert_test_result.with_step(TestStep::pass("Certificate is not revoked"));
+            }
+            RevocationStatus::Revoked {
+                revocation_date,
+                reason,
+            } => {
+                let detail = match (revocation_date, reason) {
+                    (Some(date), Some(r)) => format!("Revoked on {} ({})", date, r),
+                    (Some(date), None) => format!("Revoked on {}", date),
+                    (None, Some(r)) => format!("Revoked ({})", r),
+                    (None, None) => "Certificate has been revoked".to_string(),
+                };
+                cert_test_result =
+                    cert_test_result.with_step(TestStep::fail("Certificate is revoked", detail));
+                cert_test_result = cert_test_result.with_recommendation(
+                    "Certificate has been revoked by its CA - replace immediately".to_string(),
+                );
+            }
+            RevocationStatus::Unknown { reason } => {
+                cert_test_result = cert_test_result.with_step(TestStep::warning(
+                    "Revocation status unknown",
+                    reason.clone(),
+                ));
+            }
+        }
+
+        if !ssl_info.ocsp_stapling {
+            cert_test_result = cert_test_result.with_recommendation(
+                "Enable OCSP stapling for faster revocation checks".to_string(),
+            );
+        }
     }
 
     if (0..=30).contains(&days) {

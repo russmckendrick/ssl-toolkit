@@ -2,6 +2,79 @@
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use std::fmt;
+
+/// Certificate revocation status
+#[derive(Debug, Clone, Serialize)]
+pub enum RevocationStatus {
+    /// Certificate is not revoked
+    Good,
+    /// Certificate has been revoked
+    Revoked {
+        /// When the certificate was revoked
+        revocation_date: Option<String>,
+        /// Reason for revocation
+        reason: Option<String>,
+    },
+    /// Revocation status could not be determined
+    Unknown {
+        /// Why the status is unknown
+        reason: String,
+    },
+}
+
+impl fmt::Display for RevocationStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RevocationStatus::Good => write!(f, "Not Revoked"),
+            RevocationStatus::Revoked { reason, .. } => {
+                if let Some(r) = reason {
+                    write!(f, "Revoked ({})", r)
+                } else {
+                    write!(f, "Revoked")
+                }
+            }
+            RevocationStatus::Unknown { reason } => write!(f, "Unknown ({})", reason),
+        }
+    }
+}
+
+/// How the revocation status was determined
+#[derive(Debug, Clone, Serialize)]
+pub enum RevocationCheckMethod {
+    /// OCSP response was stapled to the TLS handshake
+    OcspStapled,
+    /// OCSP response was fetched directly from the responder
+    OcspDirect,
+    /// Checked via CRL download
+    Crl,
+    /// No revocation check was performed
+    None,
+}
+
+impl fmt::Display for RevocationCheckMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RevocationCheckMethod::OcspStapled => write!(f, "OCSP Stapling"),
+            RevocationCheckMethod::OcspDirect => write!(f, "OCSP Direct"),
+            RevocationCheckMethod::Crl => write!(f, "CRL"),
+            RevocationCheckMethod::None => write!(f, "None"),
+        }
+    }
+}
+
+/// Revocation check result
+#[derive(Debug, Clone, Serialize)]
+pub struct RevocationInfo {
+    /// The revocation status
+    pub status: RevocationStatus,
+    /// How the status was determined
+    pub method: RevocationCheckMethod,
+    /// OCSP responder URL used (if any)
+    pub ocsp_responder_url: Option<String>,
+    /// Whether the response was stapled
+    pub stapled: bool,
+}
 
 /// Detailed certificate information
 #[derive(Debug, Clone, Serialize)]
@@ -38,6 +111,12 @@ pub struct CertificateInfo {
     pub extended_key_usage: Vec<String>,
     /// Raw certificate in DER format
     pub raw_der: Vec<u8>,
+    /// OCSP responder URL from AIA extension
+    pub ocsp_responder_url: Option<String>,
+    /// CRL distribution points
+    pub crl_distribution_points: Vec<String>,
+    /// Revocation check result
+    pub revocation: Option<RevocationInfo>,
 }
 
 impl CertificateInfo {

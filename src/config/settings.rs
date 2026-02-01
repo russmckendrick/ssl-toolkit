@@ -23,6 +23,18 @@ pub struct SslSettings {
     pub handshake_timeout_secs: u64,
     pub check_legacy_protocols: bool,
     pub check_weak_ciphers: bool,
+    #[serde(default = "default_ocsp_timeout")]
+    pub ocsp_timeout_secs: u64,
+    #[serde(default = "default_check_revocation")]
+    pub check_revocation: bool,
+}
+
+fn default_ocsp_timeout() -> u64 {
+    5
+}
+
+fn default_check_revocation() -> bool {
+    true
 }
 
 impl Default for SslSettings {
@@ -32,6 +44,8 @@ impl Default for SslSettings {
             handshake_timeout_secs: 10,
             check_legacy_protocols: true,
             check_weak_ciphers: true,
+            ocsp_timeout_secs: 5,
+            check_revocation: true,
         }
     }
 }
@@ -43,6 +57,10 @@ impl SslSettings {
 
     pub fn handshake_timeout(&self) -> Duration {
         Duration::from_secs(self.handshake_timeout_secs)
+    }
+
+    pub fn ocsp_timeout(&self) -> Duration {
+        Duration::from_secs(self.ocsp_timeout_secs)
     }
 }
 

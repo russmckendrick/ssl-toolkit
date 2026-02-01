@@ -90,6 +90,10 @@ impl CertificateChecker {
         // Extract extended key usage
         let extended_key_usage = self.extract_extended_key_usage(&cert);
 
+        // Extract OCSP responder URL and CRL distribution points
+        let ocsp_responder_url = self.extract_ocsp_responder_url(&cert);
+        let crl_distribution_points = self.extract_crl_distribution_points(&cert);
+
         Ok(CertificateInfo {
             subject,
             issuer,
@@ -107,6 +111,9 @@ impl CertificateChecker {
             key_usage,
             extended_key_usage,
             raw_der: der.to_vec(),
+            ocsp_responder_url,
+            crl_distribution_points,
+            revocation: None,
         })
     }
 
@@ -218,6 +225,53 @@ impl CertificateChecker {
         }
 
         usages
+    }
+
+    /// Extract OCSP responder URL from the Authority Information Access extension
+    fn extract_ocsp_responder_url(&self, cert: &X509Certificate) -> Option<String> {
+        for ext in cert.extensions() {
+            if ext.oid == x509_parser::oid_registry::OID_PKIX_AUTHORITY_INFO_ACCESS {
+                if let Ok((_, aia)) =
+                    x509_parser::extensions::AuthorityInfoAccess::from_der(ext.value)
+                {
+                    for desc in aia.accessdescs.iter() {
+                        // OID 1.3.6.1.5.5.7.48.1 = OCSP
+                        if desc.access_method.to_string() == "1.3.6.1.5.5.7.48.1" {
+                            if let GeneralName::URI(uri) = desc.access_location {
+                                return Some(uri.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Extract CRL distribution points from the certificate
+    fn extract_crl_distribution_points(&self, cert: &X509Certificate) -> Vec<String> {
+        let mut points = Vec::new();
+        for ext in cert.extensions() {
+            if ext.oid == x509_parser::oid_registry::OID_X509_EXT_CRL_DISTRIBUTION_POINTS {
+                if let Ok((_, cdp)) =
+                    x509_parser::extensions::CRLDistributionPoints::from_der(ext.value)
+                {
+                    for dp in cdp.iter() {
+                        if let Some(x509_parser::extensions::DistributionPointName::FullName(
+                            names,
+                        )) = &dp.distribution_point
+                        {
+                            for name in names {
+                                if let GeneralName::URI(uri) = name {
+                                    points.push(uri.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        points
     }
 
     fn extract_extended_key_usage(&self, cert: &X509Certificate) -> Vec<String> {

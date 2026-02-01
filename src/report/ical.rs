@@ -112,6 +112,9 @@ mod tests {
             key_usage: vec![],
             extended_key_usage: vec![],
             raw_der: vec![],
+            ocsp_responder_url: None,
+            crl_distribution_points: vec![],
+            revocation: None,
         };
 
         let ical = IcalGenerator::generate("example.com", &cert);

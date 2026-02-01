@@ -33,6 +33,9 @@ pub enum ToolkitError {
     #[error("Certificate file operation error: {0}")]
     CertFile(#[from] CertFileError),
 
+    #[error("OCSP error: {0}")]
+    Ocsp(#[from] OcspError),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -181,6 +184,31 @@ pub enum WhoisError {
 
     #[error("WHOIS connection timed out for {domain}")]
     Timeout { domain: String },
+}
+
+/// OCSP revocation checking errors
+#[derive(Error, Debug)]
+pub enum OcspError {
+    #[error("Failed to build OCSP request: {message}")]
+    RequestBuildError { message: String },
+
+    #[error("OCSP responder unreachable: {message}")]
+    ResponderUnreachable { message: String },
+
+    #[error("Failed to parse OCSP response: {message}")]
+    ResponseParseError { message: String },
+
+    #[error("OCSP responder returned error: {message}")]
+    ResponderError { message: String },
+
+    #[error("OCSP request timed out")]
+    Timeout,
+
+    #[error("No OCSP responder URL in certificate")]
+    NoResponderUrl,
+
+    #[error("No issuer certificate available")]
+    NoIssuer,
 }
 
 /// Certificate file operation errors

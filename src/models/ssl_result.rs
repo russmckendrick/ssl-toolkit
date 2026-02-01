@@ -182,6 +182,8 @@ pub struct SslInfo {
     pub secure_renegotiation: bool,
     /// Whether OCSP stapling is supported
     pub ocsp_stapling: bool,
+    /// Raw OCSP response bytes (from stapling)
+    pub ocsp_response: Vec<u8>,
     /// Whether the certificate chain was verified by a trusted CA
     /// (false if permissive/fallback verification was used)
     pub trust_verified: bool,

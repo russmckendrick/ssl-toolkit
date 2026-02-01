@@ -11,7 +11,7 @@ use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, Server
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{ClientConfig, DigitallySignedStruct, Error as RustlsError, SignatureScheme};
 use std::net::IpAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::net::TcpStream;
 
@@ -67,6 +67,64 @@ impl ServerCertVerifier for AcceptAnyCertVerifier {
     }
 }
 
+/// A verifier wrapper that captures the OCSP response bytes from the TLS handshake
+/// before delegating to an inner verifier.
+#[derive(Debug)]
+struct OcspCapturingVerifier {
+    inner: Arc<dyn ServerCertVerifier>,
+    ocsp_response: Arc<Mutex<Vec<u8>>>,
+}
+
+impl OcspCapturingVerifier {
+    fn new(inner: Arc<dyn ServerCertVerifier>, ocsp_response: Arc<Mutex<Vec<u8>>>) -> Self {
+        Self {
+            inner,
+            ocsp_response,
+        }
+    }
+}
+
+impl ServerCertVerifier for OcspCapturingVerifier {
+    fn verify_server_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        server_name: &ServerName<'_>,
+        ocsp_response: &[u8],
+        now: UnixTime,
+    ) -> Result<ServerCertVerified, RustlsError> {
+        if !ocsp_response.is_empty() {
+            if let Ok(mut stored) = self.ocsp_response.lock() {
+                *stored = ocsp_response.to_vec();
+            }
+        }
+        self.inner
+            .verify_server_cert(end_entity, intermediates, server_name, ocsp_response, now)
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, RustlsError> {
+        self.inner.verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, RustlsError> {
+        self.inner.verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.inner.supported_verify_schemes()
+    }
+}
+
 /// SSL/TLS checker
 pub struct SslChecker {
     settings: SslSettings,
@@ -75,6 +133,9 @@ pub struct SslChecker {
 impl SslChecker {
     /// Create a new SSL checker with the given settings
     pub fn new(settings: SslSettings) -> Self {
+        // Ensure a default crypto provider is installed (needed when multiple
+        // providers are available, e.g. when reqwest enables both ring and aws-lc-rs)
+        let _ = rustls::crypto::ring::default_provider().install_default();
         Self { settings }
     }
 
@@ -116,16 +177,43 @@ impl SslChecker {
         port: u16,
         accept_invalid_certs: bool,
     ) -> Result<SslInfo, SslError> {
+        let ocsp_captured = Arc::new(Mutex::new(Vec::new()));
+
+        // Build a temporary config to get the default crypto provider,
+        // then rebuild with our OCSP-capturing verifier wrapper
+        let root_store =
+            rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+
         let config = if accept_invalid_certs {
+            let inner: Arc<dyn ServerCertVerifier> = Arc::new(AcceptAnyCertVerifier);
+            let verifier = OcspCapturingVerifier::new(inner, Arc::clone(&ocsp_captured));
             ClientConfig::builder()
                 .dangerous()
-                .with_custom_certificate_verifier(Arc::new(AcceptAnyCertVerifier))
+                .with_custom_certificate_verifier(Arc::new(verifier))
                 .with_no_client_auth()
         } else {
-            let root_store =
-                rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+            // First build a normal config to establish crypto provider
+            let normal_config = ClientConfig::builder()
+                .with_root_certificates(root_store.clone())
+                .with_no_client_auth();
+
+            // Get the verifier from the normal config's internal state
+            // We need to rebuild with our wrapper, so use the provider from the normal config
+            let provider = normal_config.crypto_provider().clone();
+
+            let inner: Arc<dyn ServerCertVerifier> =
+                rustls::client::WebPkiServerVerifier::builder_with_provider(
+                    Arc::new(root_store),
+                    provider,
+                )
+                .build()
+                .map_err(|e| SslError::ConfigurationError {
+                    message: format!("Failed to build verifier: {}", e),
+                })?;
+            let verifier = OcspCapturingVerifier::new(inner, Arc::clone(&ocsp_captured));
             ClientConfig::builder()
-                .with_root_certificates(root_store)
+                .dangerous()
+                .with_custom_certificate_verifier(Arc::new(verifier))
                 .with_no_client_auth()
         };
 
@@ -217,6 +305,12 @@ impl SslChecker {
 
         let cipher_suites = vec![CipherSuite::from_name(&cipher_suite)];
 
+        let ocsp_response = ocsp_captured
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        let has_ocsp_stapling = !ocsp_response.is_empty();
+
         Ok(SslInfo {
             ip,
             port,
@@ -226,7 +320,8 @@ impl SslChecker {
             cipher_suites,
             certificate_chain,
             secure_renegotiation: true,
-            ocsp_stapling: false,
+            ocsp_stapling: has_ocsp_stapling,
+            ocsp_response,
             trust_verified: false, // Set by caller in check()
         })
     }

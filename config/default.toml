@@ -27,6 +27,8 @@ connect_timeout_secs = 10
 handshake_timeout_secs = 10
 check_legacy_protocols = true
 check_weak_ciphers = true
+ocsp_timeout_secs = 5
+check_revocation = true
 
 # WHOIS Settings
 [whois]

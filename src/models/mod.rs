@@ -10,7 +10,10 @@ pub mod ssl_result;
 pub mod test_result;
 
 pub use cert_comparison::{CertComparison, CertComparisonEntry, CertDifference};
-pub use certificate::{CertificateInfo, CertificateSummary, CertificateType};
+pub use certificate::{
+    CertificateInfo, CertificateSummary, CertificateType, RevocationCheckMethod, RevocationInfo,
+    RevocationStatus,
+};
 pub use dns_result::DnsResult;
 pub use report_card::{Grade, ReportCard};
 pub use ssl_result::{CipherSuite, ProtocolSupport, SslInfo, TlsProtocol};

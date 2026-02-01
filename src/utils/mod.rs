@@ -6,6 +6,6 @@ pub mod error;
 pub mod progress;
 
 pub use error::{
-    CertFileError, CertificateError, ConfigError, DnsError, ReportError, Result, SslError,
-    TcpError, ToolkitError, WhoisError,
+    CertFileError, CertificateError, ConfigError, DnsError, OcspError, ReportError, Result,
+    SslError, TcpError, ToolkitError, WhoisError,
 };
