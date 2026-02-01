@@ -1,7 +1,9 @@
 //! Interactive prompts using dialoguer
 
+use crate::cli::CertFormat;
 use dialoguer::{Confirm, Input, MultiSelect, Select};
 use std::net::IpAddr;
+use std::path::PathBuf;
 
 /// Result of DNS failure prompt
 pub enum DnsFailureAction {
@@ -170,4 +172,221 @@ pub fn prompt_report_path(default_path: &str) -> anyhow::Result<String> {
         .default(default_path.to_string())
         .interact_text()?;
     Ok(path)
+}
+
+/// Main menu action choices
+pub enum MainMenuAction {
+    CheckDomain,
+    CertInfo,
+    CertVerify,
+    CertConvert,
+    Quit,
+}
+
+/// Post-operation action choices
+pub enum PostOperationAction {
+    MainMenu,
+    Quit,
+}
+
+/// Certificate verify mode chosen interactively
+pub enum CertVerifyMode {
+    KeyMatch {
+        cert: PathBuf,
+        key: PathBuf,
+    },
+    ChainValidation {
+        chain: PathBuf,
+        hostname: Option<String>,
+    },
+}
+
+/// Parameters gathered interactively for cert convert
+pub struct CertConvertParams {
+    pub input: PathBuf,
+    pub target_format: CertFormat,
+    pub output: Option<PathBuf>,
+    pub key: Option<PathBuf>,
+    pub password: Option<String>,
+}
+
+/// Show the main menu and return the user's choice
+pub fn prompt_main_menu() -> anyhow::Result<MainMenuAction> {
+    println!();
+    let items = &[
+        "Check a domain",
+        "Inspect certificate file(s)",
+        "Verify certificate & key",
+        "Convert certificate format",
+        "Quit",
+    ];
+
+    let selection = Select::new()
+        .with_prompt("What would you like to do?")
+        .items(items)
+        .default(0)
+        .interact()?;
+
+    Ok(match selection {
+        0 => MainMenuAction::CheckDomain,
+        1 => MainMenuAction::CertInfo,
+        2 => MainMenuAction::CertVerify,
+        3 => MainMenuAction::CertConvert,
+        _ => MainMenuAction::Quit,
+    })
+}
+
+/// Show the post-operation menu
+pub fn prompt_post_operation() -> anyhow::Result<PostOperationAction> {
+    println!();
+    let items = &["Run another check", "Quit"];
+
+    let selection = Select::new()
+        .with_prompt("What next?")
+        .items(items)
+        .default(0)
+        .interact()?;
+
+    Ok(match selection {
+        0 => PostOperationAction::MainMenu,
+        _ => PostOperationAction::Quit,
+    })
+}
+
+/// Prompt for a file path, validating the file exists
+fn prompt_file_path(prompt: &str) -> anyhow::Result<PathBuf> {
+    let path: String = Input::new()
+        .with_prompt(prompt)
+        .validate_with(|input: &String| -> Result<(), String> {
+            let p = PathBuf::from(input.trim());
+            if p.is_file() {
+                Ok(())
+            } else {
+                Err(format!("File not found: {}", input.trim()))
+            }
+        })
+        .interact_text()?;
+    Ok(PathBuf::from(path.trim()))
+}
+
+/// Prompt for an optional file path (empty to skip)
+fn prompt_optional_file_path(prompt: &str) -> anyhow::Result<Option<PathBuf>> {
+    let path: String = Input::new()
+        .with_prompt(prompt)
+        .default(String::new())
+        .allow_empty(true)
+        .interact_text()?;
+
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    let p = PathBuf::from(trimmed);
+    if !p.is_file() {
+        anyhow::bail!("File not found: {}", trimmed);
+    }
+    Ok(Some(p))
+}
+
+/// Interactively prompt for cert info file(s)
+pub fn prompt_cert_info_interactive() -> anyhow::Result<Vec<PathBuf>> {
+    let mut files = vec![prompt_file_path("Certificate file")?];
+
+    loop {
+        let more = Confirm::new()
+            .with_prompt("Add another file?")
+            .default(false)
+            .interact()?;
+        if !more {
+            break;
+        }
+        files.push(prompt_file_path("Certificate file")?);
+    }
+
+    Ok(files)
+}
+
+/// Interactively prompt for cert verify mode and files
+pub fn prompt_cert_verify_interactive() -> anyhow::Result<CertVerifyMode> {
+    let items = &[
+        "Check that a private key matches a certificate",
+        "Validate a certificate chain",
+    ];
+
+    let selection = Select::new()
+        .with_prompt("Verification mode")
+        .items(items)
+        .default(0)
+        .interact()?;
+
+    match selection {
+        0 => {
+            let cert = prompt_file_path("Certificate file")?;
+            let key = prompt_file_path("Private key file")?;
+            Ok(CertVerifyMode::KeyMatch { cert, key })
+        }
+        _ => {
+            let chain = prompt_file_path("Chain file (PEM with one or more certs)")?;
+            let hostname: String = Input::new()
+                .with_prompt("Hostname to validate (leave empty to skip)")
+                .default(String::new())
+                .allow_empty(true)
+                .interact_text()?;
+            let hostname = if hostname.trim().is_empty() {
+                None
+            } else {
+                Some(hostname.trim().to_string())
+            };
+            Ok(CertVerifyMode::ChainValidation { chain, hostname })
+        }
+    }
+}
+
+/// Interactively prompt for cert convert parameters
+pub fn prompt_cert_convert_interactive() -> anyhow::Result<CertConvertParams> {
+    let input = prompt_file_path("Input certificate file")?;
+
+    let formats = &["PEM", "DER", "PKCS#12 (.p12)"];
+    let selection = Select::new()
+        .with_prompt("Target format")
+        .items(formats)
+        .default(0)
+        .interact()?;
+
+    let target_format = match selection {
+        0 => CertFormat::Pem,
+        1 => CertFormat::Der,
+        _ => CertFormat::P12,
+    };
+
+    let key = if matches!(target_format, CertFormat::P12) {
+        Some(prompt_file_path("Private key file (required for PKCS#12)")?)
+    } else {
+        None
+    };
+
+    let password = if matches!(target_format, CertFormat::P12) {
+        let pwd: String = Input::new()
+            .with_prompt("PKCS#12 password (leave empty for none)")
+            .default(String::new())
+            .allow_empty(true)
+            .interact_text()?;
+        if pwd.trim().is_empty() {
+            None
+        } else {
+            Some(pwd)
+        }
+    } else {
+        None
+    };
+
+    let output = prompt_optional_file_path("Output file (leave empty for default)")?;
+
+    Ok(CertConvertParams {
+        input,
+        target_format,
+        output,
+        key,
+        password,
+    })
 }

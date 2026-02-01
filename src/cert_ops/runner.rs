@@ -7,10 +7,11 @@ use crate::cert_ops::{chain_verify, convert, key_match, reader};
 use crate::checks::CertificateChecker;
 use crate::cli::{CertConvertArgs, CertFormat, CertInfoArgs, CertVerifyArgs};
 use crate::models::{CheckStatus, DetailSection, TestResult, TestStep};
-use crate::output::results;
+use crate::output::interactive::{self, CertVerifyMode};
+use crate::output::{pager, results};
 use crate::utils::CertFileError;
 use console::style;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Resolve the password for a PKCS#12 file.
 ///
@@ -228,8 +229,10 @@ pub fn run_cert_info(args: &CertInfoArgs) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-/// Run the `cert verify` command
-pub fn run_cert_verify(args: &CertVerifyArgs) -> Result<(), anyhow::Error> {
+/// Run the `cert verify` command.
+///
+/// Returns `Ok(true)` if all checks passed, `Ok(false)` if any failed.
+pub fn run_cert_verify(args: &CertVerifyArgs) -> Result<bool, anyhow::Error> {
     let mut all_results: Vec<TestResult> = Vec::new();
 
     // Key matching mode: --cert and --key
@@ -337,13 +340,8 @@ pub fn run_cert_verify(args: &CertVerifyArgs) -> Result<(), anyhow::Error> {
         }
     }
 
-    // Exit with appropriate code
-    let any_failed = all_results.iter().any(|r| r.status == CheckStatus::Fail);
-    if any_failed {
-        std::process::exit(2);
-    }
-
-    Ok(())
+    let all_passed = !all_results.iter().any(|r| r.status == CheckStatus::Fail);
+    Ok(all_passed)
 }
 
 /// Run the `cert convert` command
@@ -450,4 +448,52 @@ pub fn run_cert_convert(args: &CertConvertArgs) -> Result<(), anyhow::Error> {
     }
 
     Ok(())
+}
+
+/// Run cert info interactively (prompt for files, then delegate)
+pub fn run_cert_info_interactive() -> Result<(), anyhow::Error> {
+    let files = interactive::prompt_cert_info_interactive()?;
+    let args = CertInfoArgs {
+        files,
+        json: false,
+        password: None,
+    };
+    run_cert_info(&args)
+}
+
+/// Run cert verify interactively (prompt for mode and files, then delegate)
+pub fn run_cert_verify_interactive() -> Result<(), anyhow::Error> {
+    let mode = interactive::prompt_cert_verify_interactive()?;
+    let args = match mode {
+        CertVerifyMode::KeyMatch { cert, key } => CertVerifyArgs {
+            cert: Some(cert),
+            key: Some(key),
+            chain: None,
+            hostname: None,
+            json: false,
+        },
+        CertVerifyMode::ChainValidation { chain, hostname } => CertVerifyArgs {
+            cert: None,
+            key: None,
+            chain: Some(chain),
+            hostname,
+            json: false,
+        },
+    };
+    let _passed = run_cert_verify(&args)?;
+    Ok(())
+}
+
+/// Run cert convert interactively (prompt for params, then delegate)
+pub fn run_cert_convert_interactive() -> Result<(), anyhow::Error> {
+    let params = interactive::prompt_cert_convert_interactive()?;
+    let args = CertConvertArgs {
+        input: Some(params.input),
+        to: params.target_format,
+        output: params.output,
+        cert: None,
+        key: params.key,
+        password: params.password,
+    };
+    run_cert_convert(&args)
 }
