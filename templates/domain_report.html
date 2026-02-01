@@ -4,17 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SSL Report - {{ domain }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --pass: {{ pass_color }};
             --fail: {{ fail_color }};
             --warning: {{ warning_color }};
             --primary: {{ primary_color }};
-            --bg: #1a1a2e;
-            --card-bg: #16213e;
-            --text: #eaeaea;
-            --text-muted: #8892a0;
-            --border: #0f3460;
+            --bg: #24283b;
+            --bg-dark: #1a1b26;
+            --bg-light: #292e42;
+            --card-bg: rgba(26, 27, 38, 0.95);
+            --text: #c0caf5;
+            --text-muted: #565f89;
+            --border: #3b4261;
+            --cyan: #7dcfff;
+            --purple: #bb9af7;
+            --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+            --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
 
         * {
@@ -23,9 +32,17 @@
             box-sizing: border-box;
         }
 
+        ::selection {
+            background: rgba(122, 162, 247, 0.3);
+            color: var(--text);
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: var(--bg);
+            font-family: var(--font-sans);
+            background:
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(122, 162, 247, 0.08), transparent),
+                radial-gradient(ellipse 60% 40% at 80% 50%, rgba(187, 154, 247, 0.04), transparent),
+                var(--bg);
             color: var(--text);
             line-height: 1.6;
             padding: 2rem;
@@ -38,95 +55,127 @@
 
         header {
             text-align: center;
-            margin-bottom: 2rem;
-            padding-bottom: 1rem;
-            border-bottom: 2px solid var(--border);
+            margin-bottom: 2.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border);
         }
 
         h1 {
-            color: var(--primary);
-            font-size: 2rem;
+            font-family: var(--font-mono);
+            color: var(--text);
+            font-size: 1.75rem;
+            font-weight: 700;
             margin-bottom: 0.5rem;
         }
 
+        h1 span {
+            background: linear-gradient(135deg, var(--primary), var(--purple), var(--cyan));
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
         .domain {
-            font-size: 1.5rem;
-            color: var(--text);
+            font-family: var(--font-mono);
+            font-size: 1.25rem;
+            color: var(--cyan);
         }
 
         .timestamp {
             color: var(--text-muted);
-            font-size: 0.9rem;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: 0.5rem;
         }
 
         .grade-box {
             display: inline-block;
-            margin-top: 1rem;
-            padding: 0.5rem 2rem;
-            border: 3px solid;
-            border-radius: 8px;
+            margin-top: 1.25rem;
+            padding: 0.75rem 2.5rem;
+            border: 2px solid;
+            border-radius: 12px;
+            font-family: var(--font-mono);
             font-size: 2rem;
-            font-weight: bold;
+            font-weight: 700;
+            background: rgba(26, 27, 38, 0.6);
+            backdrop-filter: blur(10px);
         }
 
         .score {
             display: block;
-            font-size: 0.9rem;
-            font-weight: normal;
+            font-size: 0.8rem;
+            font-weight: 500;
             margin-top: 0.25rem;
             opacity: 0.85;
         }
 
         .card {
-            background: var(--card-bg);
-            border-radius: 8px;
+            background: linear-gradient(135deg, rgba(26, 27, 38, 0.95), rgba(36, 40, 59, 0.95));
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
             padding: 1.5rem;
             margin-bottom: 1.5rem;
             border: 1px solid var(--border);
+            box-shadow:
+                0 0 0 1px rgba(59, 66, 97, 0.3),
+                0 10px 30px rgba(0, 0, 0, 0.3),
+                0 0 20px rgba(122, 162, 247, 0.03);
         }
 
         .card h2 {
-            color: var(--primary);
+            font-family: var(--font-mono);
+            color: var(--cyan);
             margin-bottom: 1rem;
-            font-size: 1.25rem;
+            font-size: 1.125rem;
+            font-weight: 600;
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            flex-wrap: wrap;
         }
 
         .status-badge {
             display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 4px;
-            font-size: 0.875rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
             font-weight: 600;
+            letter-spacing: 0.03em;
         }
 
         .status-pass {
-            background: var(--pass);
-            color: white;
+            background: rgba(158, 206, 106, 0.15);
+            color: var(--pass);
+            border: 1px solid rgba(158, 206, 106, 0.3);
         }
 
         .status-fail {
-            background: var(--fail);
-            color: white;
+            background: rgba(247, 118, 142, 0.15);
+            color: var(--fail);
+            border: 1px solid rgba(247, 118, 142, 0.3);
         }
 
         .status-warning {
-            background: var(--warning);
-            color: black;
+            background: rgba(224, 175, 104, 0.15);
+            color: var(--warning);
+            border: 1px solid rgba(224, 175, 104, 0.3);
         }
 
         .info-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
+            gap: 0.75rem;
         }
 
         .info-item {
             padding: 0.75rem;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 4px;
+            background: rgba(41, 46, 66, 0.5);
+            border-radius: 8px;
+            border: 1px solid rgba(59, 66, 97, 0.3);
         }
 
         .info-item.full-width {
@@ -135,14 +184,23 @@
 
         .info-label {
             color: var(--text-muted);
-            font-size: 0.8rem;
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
             text-transform: uppercase;
             letter-spacing: 0.05em;
+            margin-bottom: 0.25rem;
         }
 
         .info-value {
-            font-size: 1rem;
+            font-size: 0.9rem;
             word-break: break-all;
+            color: var(--text);
+        }
+
+        .info-value code, .mono {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--cyan);
         }
 
         .san-list {
@@ -153,11 +211,13 @@
         }
 
         .san-item {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 0.9rem;
+            background: rgba(41, 46, 66, 0.5);
+            border: 1px solid rgba(59, 66, 97, 0.3);
+            padding: 0.2rem 0.5rem;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--cyan);
         }
 
         /* Score breakdown table */
@@ -165,19 +225,27 @@
             width: 100%;
             border-collapse: collapse;
             margin-top: 0.5rem;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
         }
 
         .score-table th, .score-table td {
             padding: 0.6rem 0.75rem;
             text-align: left;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 1px solid rgba(59, 66, 97, 0.3);
         }
 
         .score-table th {
             color: var(--text-muted);
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             text-transform: uppercase;
             letter-spacing: 0.05em;
+            font-weight: 500;
+            background: rgba(59, 66, 97, 0.2);
+        }
+
+        .score-table td {
+            color: var(--text);
         }
 
         .score-table .total-row td {
@@ -209,12 +277,14 @@
         }
 
         .check-title {
+            font-family: var(--font-mono);
             font-weight: 600;
-            font-size: 1rem;
+            font-size: 0.95rem;
         }
 
         .check-summary {
-            font-size: 0.85rem;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
             margin-left: auto;
         }
 
@@ -229,7 +299,7 @@
             align-items: flex-start;
             gap: 0.5rem;
             padding: 0.35rem 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid rgba(59, 66, 97, 0.15);
         }
 
         .test-step:last-child {
@@ -245,12 +315,14 @@
         }
 
         .step-desc {
-            font-size: 0.9rem;
+            font-size: 0.85rem;
+            color: var(--text);
         }
 
         .step-details {
             color: var(--text-muted);
-            font-size: 0.8rem;
+            font-size: 0.75rem;
+            font-family: var(--font-mono);
             margin-left: 1.5rem;
             margin-top: 0.15rem;
         }
@@ -261,10 +333,12 @@
         }
 
         .chain-node {
-            padding: 0.6rem 0.75rem;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 4px;
+            padding: 0.75rem;
+            background: rgba(41, 46, 66, 0.4);
+            border-radius: 8px;
             margin-bottom: 0.5rem;
+            border-left: 3px solid var(--border);
+            border: 1px solid rgba(59, 66, 97, 0.3);
             border-left: 3px solid var(--border);
         }
 
@@ -292,18 +366,23 @@
         }
 
         .chain-type {
+            font-family: var(--font-mono);
             font-weight: 600;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
         }
 
         .chain-cn {
-            font-family: monospace;
-            font-size: 0.9rem;
-            color: var(--text);
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--cyan);
         }
 
         .chain-meta {
-            font-size: 0.8rem;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
             color: var(--text-muted);
             margin-top: 0.15rem;
         }
@@ -313,18 +392,23 @@
             width: 100%;
             border-collapse: collapse;
             margin-top: 0.5rem;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
         }
 
         .protocol-table th, .protocol-table td {
-            padding: 0.5rem 0.75rem;
+            padding: 0.6rem 0.75rem;
             text-align: left;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 1px solid rgba(59, 66, 97, 0.3);
         }
 
         .protocol-table th {
             color: var(--text-muted);
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 500;
+            background: rgba(59, 66, 97, 0.2);
         }
 
         .status-green { color: var(--pass); }
@@ -340,9 +424,9 @@
             padding: 0.6rem 0.75rem;
             margin-bottom: 0.5rem;
             border-left: 3px solid var(--warning);
-            background: rgba(245, 158, 11, 0.08);
-            border-radius: 0 4px 4px 0;
-            font-size: 0.9rem;
+            background: rgba(224, 175, 104, 0.08);
+            border-radius: 0 8px 8px 0;
+            font-size: 0.85rem;
         }
 
         .recommendation-item:last-child {
@@ -354,18 +438,23 @@
             width: 100%;
             border-collapse: collapse;
             margin-top: 0.5rem;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
         }
 
         .dns-table th, .dns-table td {
-            padding: 0.5rem;
+            padding: 0.6rem 0.75rem;
             text-align: left;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 1px solid rgba(59, 66, 97, 0.3);
         }
 
         .dns-table th {
             color: var(--text-muted);
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 500;
+            background: rgba(59, 66, 97, 0.2);
         }
 
         .dns-status {
@@ -378,10 +467,12 @@
 
         .dns-status.success {
             background: var(--pass);
+            box-shadow: 0 0 6px rgba(158, 206, 106, 0.4);
         }
 
         .dns-status.fail {
             background: var(--fail);
+            box-shadow: 0 0 6px rgba(247, 118, 142, 0.4);
         }
 
         /* Comparison table */
@@ -389,18 +480,23 @@
             width: 100%;
             border-collapse: collapse;
             margin-top: 0.5rem;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
         }
 
         .comparison-table th, .comparison-table td {
-            padding: 0.5rem;
+            padding: 0.6rem 0.75rem;
             text-align: left;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 1px solid rgba(59, 66, 97, 0.3);
         }
 
         .comparison-table th {
             color: var(--text-muted);
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 500;
+            background: rgba(59, 66, 97, 0.2);
         }
 
         .comparison-status {
@@ -424,7 +520,7 @@
         .diff-list {
             list-style: none;
             margin-top: 0.25rem;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
         }
 
         .diff-list li {
@@ -434,23 +530,24 @@
 
         .comparison-summary {
             padding: 0.75rem;
-            border-radius: 4px;
+            border-radius: 8px;
             margin-bottom: 1rem;
+            font-size: 0.85rem;
         }
 
         .comparison-summary.has-differences {
-            background: rgba(245, 158, 11, 0.1);
+            background: rgba(224, 175, 104, 0.08);
             border-left: 3px solid var(--warning);
         }
 
         .comparison-summary.all-match {
-            background: rgba(16, 185, 129, 0.1);
+            background: rgba(158, 206, 106, 0.08);
             border-left: 3px solid var(--pass);
         }
 
         .downloads {
             display: flex;
-            gap: 1rem;
+            gap: 0.75rem;
             flex-wrap: wrap;
         }
 
@@ -458,36 +555,79 @@
             display: inline-flex;
             align-items: center;
             gap: 0.5rem;
-            padding: 0.75rem 1.5rem;
-            background: var(--primary);
-            color: white;
+            padding: 0.6rem 1.25rem;
+            background: rgba(122, 162, 247, 0.15);
+            border: 1px solid rgba(122, 162, 247, 0.3);
+            color: var(--primary);
             text-decoration: none;
-            border-radius: 6px;
+            border-radius: 8px;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
             font-weight: 500;
-            transition: opacity 0.2s;
+            transition: all 0.3s ease;
         }
 
         .download-btn:hover {
-            opacity: 0.9;
+            background: rgba(122, 162, 247, 0.25);
+            border-color: rgba(122, 162, 247, 0.5);
+            color: var(--cyan);
         }
 
         .download-btn.disabled {
-            opacity: 0.5;
+            opacity: 0.4;
             cursor: not-allowed;
+            pointer-events: none;
         }
 
         footer {
             text-align: center;
-            margin-top: 2rem;
+            margin-top: 2.5rem;
             padding-top: 1rem;
             border-top: 1px solid var(--border);
-            color: var(--text-muted);
-            font-size: 0.875rem;
         }
+
+        footer p {
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+
+        footer a {
+            text-decoration: none;
+        }
+
+        footer .brand {
+            color: var(--purple);
+            transition: color 0.2s;
+        }
+
+        footer .brand:hover {
+            color: var(--cyan);
+        }
+
+        code {
+            font-family: var(--font-mono);
+            font-size: 0.85em;
+            background: var(--bg-dark);
+            color: var(--cyan);
+            padding: 0.15em 0.35em;
+            border-radius: 4px;
+            border: 1px solid rgba(59, 66, 97, 0.3);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-dark); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
         @media (max-width: 600px) {
             body {
                 padding: 1rem;
+            }
+
+            h1 {
+                font-size: 1.35rem;
             }
 
             .info-grid {
@@ -501,13 +641,24 @@
             .check-summary {
                 margin-left: 1.75rem;
             }
+
+            .score-table, .protocol-table, .dns-table, .comparison-table {
+                font-size: 0.7rem;
+            }
+
+            .score-table th, .score-table td,
+            .protocol-table th, .protocol-table td,
+            .dns-table th, .dns-table td,
+            .comparison-table th, .comparison-table td {
+                padding: 0.4rem 0.5rem;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>SSL/TLS Diagnostic Report</h1>
+            <h1><span>SSL/TLS Diagnostic Report</span></h1>
             <p class="domain">{{ domain }}</p>
             <p class="timestamp">Generated: {{ timestamp }}</p>
             <div class="grade-box" style="border-color: {{ grade_color }}; color: {{ grade_color }};">
@@ -536,7 +687,7 @@
                     {% for item in score_breakdown %}
                     <tr>
                         <td>{{ item.name }}</td>
-                        <td><span class="status-badge" style="background: {{ item.status_color }}; color: {% if item.status_label == 'Warning' %}black{% else %}white{% endif %};">{{ item.status_label }}</span></td>
+                        <td><span class="status-badge" style="background: rgba({{ item.status_color }}, 0.15); color: {{ item.status_color }}; border: 1px solid rgba({{ item.status_color }}, 0.3);">{{ item.status_label }}</span></td>
                         <td>{{ item.points }}</td>
                         <td>{{ item.weight_pct }}%</td>
                         <td>{{ item.weighted_score }}</td>
@@ -754,7 +905,7 @@
             <div class="info-grid">
                 <div class="info-item full-width">
                     <div class="info-label">Cipher Suite</div>
-                    <div class="info-value" style="font-family: monospace;">{{ cipher_detail.name }}</div>
+                    <div class="info-value" style="font-family: var(--font-mono); color: var(--cyan);">{{ cipher_detail.name }}</div>
                 </div>
                 <div class="info-item">
                     <div class="info-label">Key Exchange</div>
@@ -816,7 +967,7 @@
         <div class="card">
             <h2>
                 WHOIS Domain Registration
-                <span class="status-badge" style="background: {{ whois_status_color }}; color: white;">{{ whois_status_label }}</span>
+                <span class="status-badge" style="background: rgba({{ whois_status_color }}, 0.15); color: {{ whois_status_color }}; border: 1px solid rgba({{ whois_status_color }}, 0.3);">{{ whois_status_label }}</span>
             </h2>
             {% if whois_entries %}
             <div class="info-grid">
@@ -947,7 +1098,7 @@
         </div>
 
         <footer>
-            <p>Generated by SSL-Toolkit</p>
+            <p>Generated by <a href="https://www.ssl-toolkit.dev/" class="brand">SSL-Toolkit</a></p>
         </footer>
     </div>
 </body>
