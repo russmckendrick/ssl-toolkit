@@ -110,7 +110,7 @@ src/
 | `clap` | CLI parsing (derive macros) |
 | `tokio` | Async runtime (full features) |
 | `ratatui` + `crossterm` | Pager view (scrollable results) |
-| `dialoguer` + `console` | Interactive CLI prompts |
+| `inquire` + `console` | Interactive CLI prompts (with file path tab-completion) |
 | `comfy-table` | Table formatting |
 | `hickory-resolver` | Async DNS resolution |
 | `rustls` | Modern TLS (TLS 1.2/1.3) |

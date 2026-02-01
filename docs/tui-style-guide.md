@@ -81,7 +81,7 @@ The application uses a ratatui-based pager for displaying results. The pager has
 
 ### Interactive Prompts
 
-Before the pager, the application uses `dialoguer` for sequential prompts:
+Before the pager, the application uses `inquire` for sequential prompts:
 1. Domain input (if not provided via CLI)
 2. IP selection (multi-select from DNS results)
 3. Port input (if not provided via CLI)

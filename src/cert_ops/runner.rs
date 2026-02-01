@@ -32,13 +32,12 @@ fn resolve_pkcs12_password(path: &Path, password: Option<&str>) -> Result<String
 
     // Prompt if interactive
     if console::Term::stderr().is_term() {
-        let pwd = dialoguer::Password::new()
-            .with_prompt(format!(
-                "Password for {}",
-                path.file_name().unwrap_or_default().to_string_lossy()
-            ))
-            .allow_empty_password(true)
-            .interact()?;
+        let pwd = inquire::Password::new(&format!(
+            "Password for {}:",
+            path.file_name().unwrap_or_default().to_string_lossy()
+        ))
+        .without_confirmation()
+        .prompt()?;
         Ok(pwd)
     } else {
         anyhow::bail!(
@@ -70,13 +69,12 @@ fn read_certs_with_password_prompt(
         Err(_) => {
             // Empty password failed — prompt if we have a terminal.
             if console::Term::stderr().is_term() {
-                let pwd = dialoguer::Password::new()
-                    .with_prompt(format!(
-                        "Password for {}",
-                        path.file_name().unwrap_or_default().to_string_lossy()
-                    ))
-                    .allow_empty_password(true)
-                    .interact()?;
+                let pwd = inquire::Password::new(&format!(
+                    "Password for {}:",
+                    path.file_name().unwrap_or_default().to_string_lossy()
+                ))
+                .without_confirmation()
+                .prompt()?;
 
                 let certs = reader::read_certificates(path, Some(&pwd))?;
                 Ok((certs, format))

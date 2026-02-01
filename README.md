@@ -217,7 +217,7 @@ Key dependencies:
 - `clap` - CLI parsing
 - `tokio` - Async runtime
 - `ratatui` + `crossterm` - Pager view (scrollable results)
-- `dialoguer` + `console` - Interactive CLI prompts
+- `inquire` + `console` - Interactive CLI prompts
 - `comfy-table` - Table formatting
 - `hickory-resolver` - DNS resolution
 - `rustls` - Modern TLS (1.2/1.3)

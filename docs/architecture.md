@@ -179,7 +179,7 @@ Key functions:
 Handles offline certificate file operations (inspect, verify, convert). The runner (`cert_ops/runner.rs`) provides two layers:
 
 - **CLI functions** (`run_cert_info`, `run_cert_verify`, `run_cert_convert`): Called from the `cert` subcommand, print output directly to stdout.
-- **Interactive functions** (`run_cert_info_interactive`, `run_cert_verify_interactive`, `run_cert_convert_interactive`): Called from the main menu, prompt for inputs via `dialoguer`, collect `TestResult` objects, format them, and display in the ratatui pager.
+- **Interactive functions** (`run_cert_info_interactive`, `run_cert_verify_interactive`, `run_cert_convert_interactive`): Called from the main menu, prompt for inputs via `inquire`, collect `TestResult` objects, format them, and display in the ratatui pager.
 
 Internal helpers `collect_cert_info()` and `collect_cert_verify()` separate result-building from output, enabling both paths to share the same logic.
 
@@ -353,7 +353,7 @@ classDiagram
 Handles all CLI output formatting and user interaction:
 
 - **banner.rs**: ASCII art banner display
-- **interactive.rs**: Interactive prompts using `dialoguer`:
+- **interactive.rs**: Interactive prompts using `inquire`:
   - `prompt_main_menu()` — top-level menu (domain check, cert info/verify/convert, quit)
   - `prompt_post_operation()` — "Run another check" / "Quit" after each operation
   - `prompt_domain()`, `prompt_port()`, `prompt_ip_selection()` — domain check prompts
