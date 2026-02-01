@@ -1,8 +1,8 @@
 [package]
 name = "ssl-toolkit"
-version = "0.1.0"
+version = "0.0.7"
 edition = "2021"
-description = "SSL/TLS diagnostic tool with polished CLI interface"
+description = "SSL/TLS diagnostic tool with CLI interface"
 authors = ["Russ McKendrick"]
 license = "MIT"
 

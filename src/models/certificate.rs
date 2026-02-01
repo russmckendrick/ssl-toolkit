@@ -70,10 +70,18 @@ pub struct RevocationInfo {
     pub status: RevocationStatus,
     /// How the status was determined
     pub method: RevocationCheckMethod,
-    /// OCSP responder URL used (if any)
-    pub ocsp_responder_url: Option<String>,
+    /// OCSP responder URL or CRL URL that was checked
+    pub source_url: Option<String>,
     /// Whether the response was stapled
     pub stapled: bool,
+    /// Who issued the CRL or OCSP response
+    pub response_issuer: Option<String>,
+    /// When the CRL/OCSP response was produced
+    pub this_update: Option<String>,
+    /// When the next CRL/OCSP response is expected
+    pub next_update: Option<String>,
+    /// Total number of revoked certificates in the CRL (if CRL method)
+    pub crl_entries: Option<usize>,
 }
 
 /// Detailed certificate information

@@ -161,8 +161,12 @@ pub async fn run_checks(
                                     reason: format!("OCSP check failed: {}", e),
                                 },
                                 method: RevocationCheckMethod::OcspDirect,
-                                ocsp_responder_url: Some(responder_url.clone()),
+                                source_url: Some(responder_url.clone()),
                                 stapled: false,
+                                response_issuer: None,
+                                this_update: None,
+                                next_update: None,
+                                crl_entries: None,
                             })
                         }
                     }
@@ -172,8 +176,12 @@ pub async fn run_checks(
                             reason: "No issuer certificate in chain".to_string(),
                         },
                         method: RevocationCheckMethod::None,
-                        ocsp_responder_url: Some(responder_url.clone()),
+                        source_url: Some(responder_url.clone()),
                         stapled: false,
+                        response_issuer: None,
+                        this_update: None,
+                        next_update: None,
+                        crl_entries: None,
                     })
                 }
             } else if let Some(crl_url) = cert_info.crl_distribution_points.first() {
@@ -187,8 +195,12 @@ pub async fn run_checks(
                                 reason: format!("CRL check failed: {}", e),
                             },
                             method: RevocationCheckMethod::Crl,
-                            ocsp_responder_url: None,
+                            source_url: Some(crl_url.clone()),
                             stapled: false,
+                            response_issuer: None,
+                            this_update: None,
+                            next_update: None,
+                            crl_entries: None,
                         })
                     }
                 }
@@ -199,8 +211,12 @@ pub async fn run_checks(
                             .to_string(),
                     },
                     method: RevocationCheckMethod::None,
-                    ocsp_responder_url: None,
+                    source_url: None,
                     stapled: false,
+                    response_issuer: None,
+                    this_update: None,
+                    next_update: None,
+                    crl_entries: None,
                 })
             }
         } else {
@@ -530,11 +546,30 @@ pub async fn run_checks(
                     ("Status".to_string(), rev_info.status.to_string()),
                     ("Check Method".to_string(), rev_info.method.to_string()),
                 ];
-                if let Some(ref url) = rev_info.ocsp_responder_url {
-                    pairs.push(("OCSP Responder".to_string(), url.clone()));
+                if let Some(ref url) = rev_info.source_url {
+                    let label = match rev_info.method {
+                        RevocationCheckMethod::OcspStapled | RevocationCheckMethod::OcspDirect => {
+                            "OCSP Responder"
+                        }
+                        RevocationCheckMethod::Crl => "CRL URL",
+                        RevocationCheckMethod::None => "Source",
+                    };
+                    pairs.push((label.to_string(), url.clone()));
                 }
                 if rev_info.stapled {
                     pairs.push(("OCSP Stapling".to_string(), "Yes".to_string()));
+                }
+                if let Some(ref issuer) = rev_info.response_issuer {
+                    pairs.push(("Issued By".to_string(), issuer.clone()));
+                }
+                if let Some(ref this_update) = rev_info.this_update {
+                    pairs.push(("Last Updated".to_string(), this_update.clone()));
+                }
+                if let Some(ref next_update) = rev_info.next_update {
+                    pairs.push(("Next Update".to_string(), next_update.clone()));
+                }
+                if let Some(entries) = rev_info.crl_entries {
+                    pairs.push(("Revoked Certs in CRL".to_string(), entries.to_string()));
                 }
                 pairs
             },

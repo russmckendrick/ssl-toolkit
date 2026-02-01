@@ -8,6 +8,13 @@ use sha1::{Digest, Sha1};
 use std::time::Duration;
 use x509_parser::prelude::*;
 
+/// Metadata extracted from an OCSP response
+struct OcspResponseMeta {
+    status: RevocationStatus,
+    this_update: Option<String>,
+    next_update: Option<String>,
+}
+
 /// OCSP checker for certificate revocation status
 pub struct OcspChecker {
     timeout: Duration,
@@ -26,12 +33,16 @@ impl OcspChecker {
         cert_der: &[u8],
         issuer_der: &[u8],
     ) -> Result<RevocationInfo, OcspError> {
-        let status = self.parse_response(ocsp_response_bytes, cert_der, issuer_der)?;
+        let meta = self.parse_response(ocsp_response_bytes, cert_der, issuer_der)?;
         Ok(RevocationInfo {
-            status,
+            status: meta.status,
             method: RevocationCheckMethod::OcspStapled,
-            ocsp_responder_url: None,
+            source_url: None,
             stapled: true,
+            response_issuer: None,
+            this_update: meta.this_update,
+            next_update: meta.next_update,
+            crl_entries: None,
         })
     }
 
@@ -80,12 +91,16 @@ impl OcspChecker {
                 message: e.to_string(),
             })?;
 
-        let status = self.parse_response(&body, cert_der, issuer_der)?;
+        let meta = self.parse_response(&body, cert_der, issuer_der)?;
         Ok(RevocationInfo {
-            status,
+            status: meta.status,
             method: RevocationCheckMethod::OcspDirect,
-            ocsp_responder_url: Some(responder_url.to_string()),
+            source_url: Some(responder_url.to_string()),
             stapled: false,
+            response_issuer: None,
+            this_update: meta.this_update,
+            next_update: meta.next_update,
+            crl_entries: None,
         })
     }
 
@@ -140,6 +155,12 @@ impl OcspChecker {
             message: format!("Failed to parse CRL: {:?}", e),
         })?;
 
+        // Extract CRL metadata
+        let crl_issuer = crl.issuer().to_string();
+        let crl_last_update = crl.last_update().to_datetime().to_string();
+        let crl_next_update = crl.next_update().map(|t| t.to_datetime().to_string());
+        let crl_total_entries = crl.iter_revoked_certificates().count();
+
         // Check if our certificate's serial is in the revoked list
         for revoked in crl.iter_revoked_certificates() {
             let revoked_serial = revoked.raw_serial();
@@ -147,14 +168,21 @@ impl OcspChecker {
                 // Found it - certificate is revoked
                 let revocation_date = Some(revoked.revocation_date.to_datetime().to_string());
 
+                // Extract reason code if present
+                let reason = revoked.reason_code().map(|(_, code)| code.to_string());
+
                 return Ok(RevocationInfo {
                     status: RevocationStatus::Revoked {
                         revocation_date,
-                        reason: None,
+                        reason,
                     },
                     method: RevocationCheckMethod::Crl,
-                    ocsp_responder_url: None,
+                    source_url: Some(crl_url.to_string()),
                     stapled: false,
+                    response_issuer: Some(crl_issuer),
+                    this_update: Some(crl_last_update),
+                    next_update: crl_next_update,
+                    crl_entries: Some(crl_total_entries),
                 });
             }
         }
@@ -163,8 +191,12 @@ impl OcspChecker {
         Ok(RevocationInfo {
             status: RevocationStatus::Good,
             method: RevocationCheckMethod::Crl,
-            ocsp_responder_url: None,
+            source_url: Some(crl_url.to_string()),
             stapled: false,
+            response_issuer: Some(crl_issuer),
+            this_update: Some(crl_last_update),
+            next_update: crl_next_update,
+            crl_entries: Some(crl_total_entries),
         })
     }
 
@@ -255,13 +287,13 @@ impl OcspChecker {
         Ok(ocsp_request)
     }
 
-    /// Parse an OCSP response and extract the certificate status
+    /// Parse an OCSP response and extract the certificate status with metadata
     fn parse_response(
         &self,
         response_bytes: &[u8],
         cert_der: &[u8],
         _issuer_der: &[u8],
-    ) -> Result<RevocationStatus, OcspError> {
+    ) -> Result<OcspResponseMeta, OcspError> {
         // OCSPResponse ::= SEQUENCE {
         //   responseStatus ENUMERATED,
         //   responseBytes [0] EXPLICIT ResponseBytes OPTIONAL
@@ -300,8 +332,12 @@ impl OcspChecker {
                 6 => "unauthorized",
                 _ => "unknown",
             };
-            return Ok(RevocationStatus::Unknown {
-                reason: format!("OCSP responder returned: {}", status_name),
+            return Ok(OcspResponseMeta {
+                status: RevocationStatus::Unknown {
+                    reason: format!("OCSP responder returned: {}", status_name),
+                },
+                this_update: None,
+                next_update: None,
             });
         }
 
@@ -414,13 +450,12 @@ impl OcspChecker {
                                 // CertID has serialNumber as last field
                                 if let Some(last) = cert_id_seq.last() {
                                     if let Ok(resp_serial) = last.as_slice() {
-                                        // Compare serial numbers (skip leading zeros)
                                         let resp_serial_trimmed = trim_leading_zeros(resp_serial);
                                         let cert_serial_trimmed =
                                             trim_leading_zeros(&serial_to_match);
 
                                         if resp_serial_trimmed == cert_serial_trimmed {
-                                            return self.parse_cert_status(&sr_seq[1]);
+                                            return self.build_ocsp_meta(&sr_seq[1], sr_seq);
                                         }
                                     }
                                 }
@@ -434,15 +469,43 @@ impl OcspChecker {
                 if let Some(first_resp) = responses.first() {
                     if let Ok(sr_seq) = first_resp.as_sequence() {
                         if sr_seq.len() >= 2 {
-                            return self.parse_cert_status(&sr_seq[1]);
+                            return self.build_ocsp_meta(&sr_seq[1], sr_seq);
                         }
                     }
                 }
             }
         }
 
-        Ok(RevocationStatus::Unknown {
-            reason: "Could not find matching SingleResponse in OCSP response".to_string(),
+        Ok(OcspResponseMeta {
+            status: RevocationStatus::Unknown {
+                reason: "Could not find matching SingleResponse in OCSP response".to_string(),
+            },
+            this_update: None,
+            next_update: None,
+        })
+    }
+
+    /// Build OCSP response metadata from a SingleResponse
+    fn build_ocsp_meta(
+        &self,
+        cert_status_obj: &x509_parser::der_parser::ber::BerObject,
+        single_response: &[x509_parser::der_parser::ber::BerObject],
+    ) -> Result<OcspResponseMeta, OcspError> {
+        let status = self.parse_cert_status(cert_status_obj)?;
+
+        // Extract thisUpdate (index 2) and nextUpdate (index 3, optional tagged [0])
+        let this_update = single_response
+            .get(2)
+            .and_then(|obj| extract_generalized_time(obj));
+
+        let next_update = single_response
+            .get(3)
+            .and_then(|obj| extract_generalized_time(obj));
+
+        Ok(OcspResponseMeta {
+            status,
+            this_update,
+            next_update,
         })
     }
 
@@ -520,6 +583,64 @@ fn der_wrap_sequence(content: &[u8]) -> Vec<u8> {
 fn trim_leading_zeros(bytes: &[u8]) -> &[u8] {
     let pos = bytes.iter().position(|&b| b != 0).unwrap_or(bytes.len());
     &bytes[pos..]
+}
+
+/// Extract a GeneralizedTime string from a BER object.
+/// Handles both direct GeneralizedTime values and [0] EXPLICIT wrappers.
+fn extract_generalized_time(obj: &x509_parser::der_parser::ber::BerObject) -> Option<String> {
+    // First try: raw content is the time string directly (GeneralizedTime)
+    if let Ok(bytes) = obj.as_slice() {
+        // Filter to only printable ASCII (the time string like "20260208110838Z")
+        let ascii: Vec<u8> = bytes
+            .iter()
+            .copied()
+            .filter(|b| b.is_ascii_graphic())
+            .collect();
+        if ascii.len() >= 14 {
+            if let Ok(s) = std::str::from_utf8(&ascii) {
+                return Some(format_generalized_time(s));
+            }
+        }
+    }
+
+    // Second try: parse as DER to unwrap any EXPLICIT tagging
+    if let Ok(raw) = obj.as_slice() {
+        if let Ok((_, inner)) = parse_der(raw) {
+            if let Ok(inner_bytes) = inner.as_slice() {
+                let ascii: Vec<u8> = inner_bytes
+                    .iter()
+                    .copied()
+                    .filter(|b| b.is_ascii_graphic())
+                    .collect();
+                if ascii.len() >= 14 {
+                    if let Ok(s) = std::str::from_utf8(&ascii) {
+                        return Some(format_generalized_time(s));
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Format a GeneralizedTime string (e.g. "20260208110838Z") into a readable date
+fn format_generalized_time(s: &str) -> String {
+    // GeneralizedTime: YYYYMMDDHHmmSSZ or YYYYMMDDHHmmSS.fracZ
+    let s = s.trim_end_matches('Z');
+    if s.len() >= 14 {
+        format!(
+            "{}-{}-{} {}:{}:{} UTC",
+            &s[0..4],
+            &s[4..6],
+            &s[6..8],
+            &s[8..10],
+            &s[10..12],
+            &s[12..14]
+        )
+    } else {
+        s.to_string()
+    }
 }
 
 /// Parse a DER-encoded blob using x509-parser's der_parser
