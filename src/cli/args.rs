@@ -2,7 +2,7 @@
 //!
 //! Defines all command-line options for the SSL-Toolkit application.
 
-use clap::Parser;
+use clap::{Parser, Subcommand, ValueEnum};
 use std::net::IpAddr;
 use std::path::PathBuf;
 
@@ -71,6 +71,112 @@ pub struct Cli {
     /// Custom configuration file path
     #[arg(long)]
     pub config: Option<PathBuf>,
+
+    /// Subcommand for certificate file operations
+    #[command(subcommand)]
+    pub command: Option<SubCommand>,
+}
+
+/// Subcommands for ssl-toolkit
+#[derive(Subcommand, Debug)]
+pub enum SubCommand {
+    /// Certificate file operations (inspect, verify, convert)
+    Cert {
+        #[command(subcommand)]
+        action: CertAction,
+    },
+}
+
+/// Actions for the cert subcommand
+#[derive(Subcommand, Debug)]
+pub enum CertAction {
+    /// Inspect certificate file(s) and display details
+    Info(CertInfoArgs),
+
+    /// Verify certificate/key pairs or certificate chains
+    Verify(CertVerifyArgs),
+
+    /// Convert certificates between PEM, DER, and PKCS#12 formats
+    Convert(CertConvertArgs),
+}
+
+/// Arguments for `cert info`
+#[derive(Parser, Debug)]
+pub struct CertInfoArgs {
+    /// Certificate file(s) to inspect (PEM, DER, or PKCS#12)
+    #[arg(required = true)]
+    pub files: Vec<PathBuf>,
+
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+
+    /// PKCS#12 password (if inspecting a .p12/.pfx file)
+    #[arg(long)]
+    pub password: Option<String>,
+}
+
+/// Arguments for `cert verify`
+#[derive(Parser, Debug)]
+pub struct CertVerifyArgs {
+    /// Certificate file to verify
+    #[arg(long)]
+    pub cert: Option<PathBuf>,
+
+    /// Private key file (for key-pair matching)
+    #[arg(long)]
+    pub key: Option<PathBuf>,
+
+    /// Certificate chain file (for chain validation)
+    #[arg(long)]
+    pub chain: Option<PathBuf>,
+
+    /// Expected hostname (for chain hostname validation)
+    #[arg(long)]
+    pub hostname: Option<String>,
+
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// Arguments for `cert convert`
+#[derive(Parser, Debug)]
+pub struct CertConvertArgs {
+    /// Input file to convert
+    #[arg()]
+    pub input: Option<PathBuf>,
+
+    /// Target format
+    #[arg(long, value_name = "FORMAT")]
+    pub to: CertFormat,
+
+    /// Output file path (defaults to input filename with new extension)
+    #[arg(short, long)]
+    pub output: Option<PathBuf>,
+
+    /// Certificate file (for PEM → PKCS#12 conversion)
+    #[arg(long)]
+    pub cert: Option<PathBuf>,
+
+    /// Private key file (for PEM → PKCS#12 conversion)
+    #[arg(long)]
+    pub key: Option<PathBuf>,
+
+    /// PKCS#12 password
+    #[arg(long)]
+    pub password: Option<String>,
+}
+
+/// Supported certificate formats
+#[derive(Debug, Clone, ValueEnum)]
+pub enum CertFormat {
+    /// PEM format (Base64 encoded with headers)
+    Pem,
+    /// DER format (binary ASN.1)
+    Der,
+    /// PKCS#12 format (bundled cert + key)
+    P12,
 }
 
 impl Cli {
@@ -129,6 +235,7 @@ mod tests {
             skip_whois: false,
             timeout: 10,
             config: None,
+            command: None,
         };
         assert_eq!(cli.normalized_domain(), Some("example.com".to_string()));
     }
@@ -147,6 +254,7 @@ mod tests {
             skip_whois: false,
             timeout: 10,
             config: None,
+            command: None,
         };
         assert!(!cli.is_interactive());
     }
@@ -165,6 +273,7 @@ mod tests {
             skip_whois: false,
             timeout: 10,
             config: None,
+            command: None,
         };
         assert!(!cli.is_interactive());
     }

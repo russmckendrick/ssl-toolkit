@@ -73,15 +73,15 @@ where
 {
     let lines: Vec<&str> = content.lines().collect();
     let total_lines = lines.len();
-    
+
     // Determine content width for wrapping calculation
     // Note: This is an approximation since Ratatui handles wrapping dynamically,
     // but we need it for scrollbar state.
     // We'll trust Ratatui's Paragraph wrapping for display.
-    
+
     let mut scroll_offset = 0;
     let mut scrollbar_state = ScrollbarState::default().content_length(total_lines);
-    
+
     // Flash message state
     let mut flash: Option<(String, StatusColor)> = None;
 
@@ -108,7 +108,12 @@ where
                 let header_text = Line::from(vec![
                     Span::styled("◆", Style::default().fg(Color::Cyan)),
                     Span::raw(" "),
-                    Span::styled(header, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        header,
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ),
                 ]);
                 let header_para = Paragraph::new(vec![
                     header_text,
@@ -121,7 +126,9 @@ where
 
                 // 2. Content
                 // Convert ANSI string to Ratatui text
-                let content_text = content.into_text().unwrap_or_else(|_| ratatui::text::Text::raw(content));
+                let content_text = content
+                    .into_text()
+                    .unwrap_or_else(|_| ratatui::text::Text::raw(content));
                 let content_widget = Paragraph::new(content_text)
                     .scroll((scroll_offset as u16, 0))
                     .wrap(ratatui::widgets::Wrap { trim: false }); // Wrap lines
@@ -130,18 +137,18 @@ where
                 // Update scrollbar state based on viewport height
                 // Note: Paragraph line count might differ from logical lines if wrapped,
                 // but for simplicity we track logical lines or let user scroll visually.
-                // A more robust approach wraps text manually to count visual lines, 
+                // A more robust approach wraps text manually to count visual lines,
                 // but Ratatui's scroll is line-based.
                 // We'll stick to logical line scrolling for now or we can count visual lines if needed.
                 // To keep it simple and stable: map scroll_offset to logical lines.
                 // If text wraps, Ratatui hides lines at the top.
-                
+
                 // Draw Scrollbar
                 let scrollbar = Scrollbar::default()
                     .orientation(ScrollbarOrientation::VerticalRight)
                     .begin_symbol(Some("↑"))
                     .end_symbol(Some("↓"));
-                
+
                 // Estimate visual lines for scrollbar correctness
                 // This is expensive to calculate perfectly every frame without cache,
                 // so we approximate or use logical lines.
@@ -149,12 +156,8 @@ where
                 scrollbar_state = scrollbar_state
                     .content_length(total_lines)
                     .position(scroll_offset);
-                
-                f.render_stateful_widget(
-                    scrollbar,
-                    chunks[1],
-                    &mut scrollbar_state,
-                );
+
+                f.render_stateful_widget(scrollbar, chunks[1], &mut scrollbar_state);
 
                 // 3. Status Bar
                 let status_area = chunks[2];
@@ -169,7 +172,7 @@ where
                         StatusColor::Red => Color::White,
                         _ => Color::Black,
                     };
-                    
+
                     let padded_msg = format!("{:<width$}", msg, width = status_area.width as usize);
                     let status_widget = Paragraph::new(padded_msg)
                         .style(Style::default().bg(bg_color).fg(text_color));
@@ -178,7 +181,7 @@ where
                     // Normal Status Bar
                     // Left: "Lines X-Y of Z (Pct)" or "All content shown"
                     // Right: Hints
-                    
+
                     // Note: calculating exact visual lines displayed is tricky with wrapping.
                     // We'll show simplistic info: "Line X of Y"
                     let pct = if total_lines > 0 {
@@ -186,18 +189,19 @@ where
                     } else {
                         100
                     };
-                    
-                    let status_left = format!(" Line {}/{} ({}%)", scroll_offset + 1, total_lines, pct);
+
+                    let status_left =
+                        format!(" Line {}/{} ({}%)", scroll_offset + 1, total_lines, pct);
                     let status_right = " ↑↓: scroll  Space: page  s: save  n: new  q: quit ";
-                    
+
                     // Pad center
                     let available_width = status_area.width as usize;
                     let left_len = status_left.len();
                     let right_len = status_right.len();
-                    
+
                     let gap = available_width.saturating_sub(left_len + right_len);
                     let status_text = format!("{}{}{}", status_left, " ".repeat(gap), status_right);
-                    
+
                     let status_widget = Paragraph::new(status_text)
                         .style(Style::default().bg(Color::White).fg(Color::Black));
                     f.render_widget(status_widget, status_area);
@@ -207,12 +211,12 @@ where
                 if show_save_popup {
                     let area = centered_rect(60, 20, f.area());
                     f.render_widget(Clear, area); // Clear background
-                    
+
                     let block = Block::default()
                         .title(" Save Report ")
                         .borders(Borders::ALL)
                         .style(Style::default().bg(Color::DarkGray).fg(Color::White));
-                    
+
                     let inner_area = block.inner(area);
                     f.render_widget(block, area);
 
@@ -232,8 +236,11 @@ where
                     );
 
                     f.render_widget(
-                        Paragraph::new(format!("> {}_", save_input))
-                            .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                        Paragraph::new(format!("> {}_", save_input)).style(
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD),
+                        ),
                         vertical[1],
                     );
 
@@ -270,10 +277,9 @@ where
                                         " Save cancelled — press any key".to_string(),
                                         StatusColor::Red,
                                     ),
-                                    Err(e) => (
-                                        format!(" ✗ {} — press any key", e),
-                                        StatusColor::Red,
-                                    ),
+                                    Err(e) => {
+                                        (format!(" ✗ {} — press any key", e), StatusColor::Red)
+                                    }
                                 });
                                 save_input.clear();
                             }
@@ -298,14 +304,16 @@ where
                         if flash.is_some() {
                             flash = None;
                             // Don't consume navigation keys just to clear flash?
-                            // Original implementation: "any key clears the flash message", 
+                            // Original implementation: "any key clears the flash message",
                             // and "If the key was a navigation key, also apply it"
                         }
 
                         match key.code {
                             KeyCode::Char('q') | KeyCode::Esc => return PagerAction::Quit,
-                            KeyCode::Char('n') | KeyCode::Char('N') => return PagerAction::NewCheck,
-                            
+                            KeyCode::Char('n') | KeyCode::Char('N') => {
+                                return PagerAction::NewCheck
+                            }
+
                             // Scrolling
                             KeyCode::Down | KeyCode::Char('j') | KeyCode::Enter => {
                                 if scroll_offset < total_lines.saturating_sub(1) {
@@ -318,7 +326,8 @@ where
                             KeyCode::PageDown | KeyCode::Char(' ') => {
                                 let height = terminal.size().unwrap().height as usize;
                                 let viewport = height.saturating_sub(4).max(1); // approx viewport
-                                scroll_offset = (scroll_offset + viewport).min(total_lines.saturating_sub(1));
+                                scroll_offset =
+                                    (scroll_offset + viewport).min(total_lines.saturating_sub(1));
                             }
                             KeyCode::PageUp | KeyCode::Char('b') => {
                                 let height = terminal.size().unwrap().height as usize;
@@ -337,7 +346,7 @@ where
                                 show_save_popup = true;
                                 save_input.clear();
                             }
-                            
+
                             _ => {}
                         }
                     }

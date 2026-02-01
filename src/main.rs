@@ -6,13 +6,14 @@
 use anyhow::Result;
 use chrono::Local;
 use console::style;
-use ssl_toolkit::cli::Cli;
+use ssl_toolkit::cert_ops;
+use ssl_toolkit::cli::{Cli, SubCommand};
 use ssl_toolkit::config;
 use ssl_toolkit::output::{banner, grade, interactive, json, pager, pager::PagerAction, results};
 use ssl_toolkit::report::HtmlReport;
 use ssl_toolkit::runner::{self, CheckEvent, RunConfig};
-use ssl_toolkit::TestResult;
 use ssl_toolkit::utils::progress;
+use ssl_toolkit::TestResult;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use tracing_subscriber::EnvFilter;
@@ -26,6 +27,11 @@ async fn main() -> Result<()> {
 
     // Parse CLI arguments
     let cli = Cli::parse_args();
+
+    // Dispatch subcommands
+    if let Some(SubCommand::Cert { action }) = &cli.command {
+        return run_cert_subcommand(action);
+    }
 
     // Load configuration
     let (settings, theme, _messages) = config::load_default_config().unwrap_or_else(|_| {
@@ -326,10 +332,7 @@ async fn main() -> Result<()> {
 
                 // Display with pager in interactive mode, or print directly
                 if is_interactive {
-                    let header = format!(
-                        "SSL/TLS Report for {} (port {})",
-                        domain, port
-                    );
+                    let header = format!("SSL/TLS Report for {} (port {})", domain, port);
 
                     // Build save closure that the pager calls inline when 's' is pressed
                     let save_domain = domain.clone();
@@ -337,7 +340,7 @@ async fn main() -> Result<()> {
                     let save_run_result = &run_result;
                     let on_save = move |input: Option<String>| {
                         let default_filename = generate_default_filename(&save_domain);
-                        
+
                         // If input provided, use it. If not, prompt with dialoguer if in prompt mode, or use default.
                         // But now we are using TUI popup mode mainly.
                         // The callback receives `Some(path)` if user typed something, or `None` if they accepted default/empty.
@@ -345,7 +348,7 @@ async fn main() -> Result<()> {
                         // So if None, we use default. If Some, we use it.
                         // Actually, the closure signature is just a helper.
                         // Let's adapt it.
-                        
+
                         let path = match input {
                             Some(s) if !s.trim().is_empty() => s,
                             _ => default_filename.clone(),
@@ -463,4 +466,13 @@ fn generate_default_filename(domain: &str) -> String {
     let domain_safe = domain.replace('.', "-");
     let timestamp = Local::now().format("%Y-%m-%d-%H%M");
     format!("report-{}-{}.html", domain_safe, timestamp)
+}
+
+fn run_cert_subcommand(action: &ssl_toolkit::cli::CertAction) -> Result<()> {
+    use ssl_toolkit::cli::CertAction;
+    match action {
+        CertAction::Info(args) => cert_ops::runner::run_cert_info(args),
+        CertAction::Verify(args) => cert_ops::runner::run_cert_verify(args),
+        CertAction::Convert(args) => cert_ops::runner::run_cert_convert(args),
+    }
 }

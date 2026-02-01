@@ -4,4 +4,6 @@
 
 pub mod args;
 
-pub use args::Cli;
+pub use args::{
+    CertAction, CertConvertArgs, CertFormat, CertInfoArgs, CertVerifyArgs, Cli, SubCommand,
+};

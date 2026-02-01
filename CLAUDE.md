@@ -26,14 +26,34 @@ cargo run -- --domain example.com --quiet           # Quiet mode (grade only)
 cargo run -- --help                                 # Show options
 ```
 
+### Certificate File Operations (`cert` subcommand)
+
+```bash
+cargo run -- cert info cert.pem                                    # Inspect cert file(s)
+cargo run -- cert info cert.pem chain.pem --json                   # JSON output
+cargo run -- cert verify --cert cert.pem --key key.pem             # Check key matches cert
+cargo run -- cert verify --chain chain.pem --hostname example.com  # Validate chain
+cargo run -- cert convert cert.pem --to der                        # PEM → DER
+cargo run -- cert convert cert.pem --to der -o cert.der            # Explicit output path
+cargo run -- cert convert --to p12 --cert c.pem --key k.pem        # PEM → PKCS#12
+cargo run -- cert convert bundle.p12 --to pem --password pass      # PKCS#12 → PEM
+```
+
 ## Architecture
 
 ```
 src/
-├── main.rs              # Entry point & CLI parsing
+├── main.rs              # Entry point & CLI parsing (+ cert subcommand dispatch)
 ├── lib.rs               # Public API exports
 ├── runner.rs            # Check orchestration engine
-├── cli/args.rs          # Clap argument definitions
+├── cli/args.rs          # Clap argument definitions (+ SubCommand, CertAction enums)
+├── cert_ops/            # Certificate file operations
+│   ├── mod.rs           # Module declarations
+│   ├── reader.rs        # Format detection & certificate reading (PEM/DER/PKCS#12)
+│   ├── key_match.rs     # Private key parsing & cert/key pair matching
+│   ├── chain_verify.rs  # Certificate chain integrity validation
+│   ├── convert.rs       # Format conversion (PEM↔DER↔PKCS#12)
+│   └── runner.rs        # Orchestrates cert info/verify/convert operations
 ├── config/              # Configuration loading
 │   ├── mod.rs
 │   ├── settings.rs      # DNS providers, SSL timeouts, WHOIS settings
@@ -86,6 +106,11 @@ src/
 | `indicatif` | Progress indicators |
 | `base64` | PEM/data URI encoding |
 | `whois-rust` | WHOIS lookups (node-whois servers.json) |
+| `pem` | PEM block parsing (CERTIFICATE, PRIVATE KEY) |
+| `pkcs8` | Private key parsing (PKCS#8) |
+| `rsa` | RSA key matching |
+| `p256` / `p384` | EC key matching (P-256, P-384) |
+| `p12-keystore` | PKCS#12 read/write (pure Rust) |
 | `ansi-to-tui` | ANSI text in ratatui pager |
 | `tracing` | Structured logging |
 | `thiserror` + `anyhow` | Error handling |
