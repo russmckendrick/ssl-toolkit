@@ -41,6 +41,9 @@ async fn main() -> Result<()> {
         return run_cert_subcommand(action);
     }
 
+    // Initialize inquire theme (Tokyo Night Storm)
+    interactive::init_theme();
+
     // Load configuration
     let (settings, theme, _messages) = config::load_default_config().unwrap_or_else(|_| {
         (
@@ -55,31 +58,53 @@ async fn main() -> Result<()> {
 
     // Interactive menu mode: no domain, no subcommand, TTY available
     if is_interactive && !cli.has_domain() {
-        banner::print_banner();
+        banner::refresh_banner();
 
         loop {
-            let action = interactive::prompt_main_menu()?;
+            let action = match interactive::prompt_main_menu() {
+                Ok(a) => a,
+                Err(e) if interactive::is_user_cancel(&e) => break,
+                Err(e) => return Err(e),
+            };
             match action {
                 interactive::MainMenuAction::CheckDomain => {
-                    let outcome =
-                        run_domain_check_interactive(&cli, &settings, &theme, verbose).await?;
-                    match outcome {
-                        DomainCheckOutcome::NewCheck => continue,
-                        DomainCheckOutcome::Quit => {}
+                    match run_domain_check_interactive(&cli, &settings, &theme, verbose).await {
+                        Ok(DomainCheckOutcome::NewCheck) => {
+                            banner::refresh_banner();
+                            continue;
+                        }
+                        Ok(DomainCheckOutcome::Quit) => {}
+                        Err(e) if interactive::is_user_cancel(&e) => {
+                            banner::refresh_banner();
+                            continue;
+                        }
+                        Err(e) => return Err(e),
                     }
                 }
                 interactive::MainMenuAction::CertInfo => {
                     if let Err(e) = cert_ops::runner::run_cert_info_interactive() {
+                        if interactive::is_user_cancel(&e) {
+                            banner::refresh_banner();
+                            continue;
+                        }
                         println!("  {} {}", style("✗").red(), e);
                     }
                 }
                 interactive::MainMenuAction::CertVerify => {
                     if let Err(e) = cert_ops::runner::run_cert_verify_interactive() {
+                        if interactive::is_user_cancel(&e) {
+                            banner::refresh_banner();
+                            continue;
+                        }
                         println!("  {} {}", style("✗").red(), e);
                     }
                 }
                 interactive::MainMenuAction::CertConvert => {
                     if let Err(e) = cert_ops::runner::run_cert_convert_interactive() {
+                        if interactive::is_user_cancel(&e) {
+                            banner::refresh_banner();
+                            continue;
+                        }
                         println!("  {} {}", style("✗").red(), e);
                     }
                 }
@@ -92,9 +117,14 @@ async fn main() -> Result<()> {
                 action,
                 interactive::MainMenuAction::CheckDomain | interactive::MainMenuAction::Quit
             ) {
-                match interactive::prompt_post_operation()? {
-                    interactive::PostOperationAction::MainMenu => continue,
-                    interactive::PostOperationAction::Quit => break,
+                match interactive::prompt_post_operation() {
+                    Ok(interactive::PostOperationAction::MainMenu) => {
+                        banner::refresh_banner();
+                        continue;
+                    }
+                    Ok(interactive::PostOperationAction::Quit) => break,
+                    Err(e) if interactive::is_user_cancel(&e) => break,
+                    Err(e) => return Err(e),
                 }
             }
         }
@@ -318,14 +348,22 @@ async fn run_domain_check_cli(
     let mut domain = if let Some(d) = cli.normalized_domain() {
         d
     } else if is_interactive {
-        interactive::prompt_domain()?
+        match interactive::prompt_domain() {
+            Ok(d) => d,
+            Err(e) if interactive::is_user_cancel(&e) => std::process::exit(0),
+            Err(e) => return Err(e),
+        }
     } else {
         anyhow::bail!("Domain is required. Use --domain or -d to specify, or run without flags for interactive mode.");
     };
 
     // Get port
     let port = if is_interactive && !cli.port_was_set() {
-        interactive::prompt_port(cli.port_or_default())?
+        match interactive::prompt_port(cli.port_or_default()) {
+            Ok(p) => p,
+            Err(e) if interactive::is_user_cancel(&e) => std::process::exit(0),
+            Err(e) => return Err(e),
+        }
     } else {
         cli.port_or_default()
     };
@@ -356,17 +394,25 @@ async fn run_domain_check_cli(
                         style("✗").red(),
                         domain
                     );
-                    match interactive::prompt_dns_failure(&domain)? {
-                        interactive::DnsFailureAction::ManualIp(ip) => {
+                    match interactive::prompt_dns_failure(&domain) {
+                        Ok(interactive::DnsFailureAction::ManualIp(ip)) => {
                             break vec![ip];
                         }
-                        interactive::DnsFailureAction::Retry => {
-                            domain = interactive::prompt_domain()?;
+                        Ok(interactive::DnsFailureAction::Retry) => {
+                            domain = match interactive::prompt_domain() {
+                                Ok(d) => d,
+                                Err(e) if interactive::is_user_cancel(&e) => std::process::exit(0),
+                                Err(e) => return Err(e),
+                            };
                             continue;
                         }
-                        interactive::DnsFailureAction::Quit => {
+                        Ok(interactive::DnsFailureAction::Quit) => {
                             std::process::exit(0);
                         }
+                        Err(e) if interactive::is_user_cancel(&e) => {
+                            std::process::exit(0);
+                        }
+                        Err(e) => return Err(e),
                     }
                 } else if cli.json {
                     println!(
@@ -429,7 +475,11 @@ async fn run_domain_check_cli(
 
             // IP selection
             if is_interactive {
-                break interactive::prompt_ip_selection(&all_ips)?;
+                break match interactive::prompt_ip_selection(&all_ips) {
+                    Ok(ips) => ips,
+                    Err(e) if interactive::is_user_cancel(&e) => std::process::exit(0),
+                    Err(e) => return Err(e),
+                };
             } else {
                 break all_ips;
             }
@@ -610,6 +660,7 @@ async fn run_domain_check_cli(
 
                     match action {
                         PagerAction::NewCheck => {
+                            banner::clear_screen();
                             let exe = std::env::current_exe()?;
                             let err = exec_process(&exe);
                             anyhow::bail!("Failed to restart: {}", err);

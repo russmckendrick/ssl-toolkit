@@ -2,16 +2,90 @@
 
 use crate::cli::CertFormat;
 use inquire::autocompletion::{Autocomplete, Replacement};
+use inquire::ui::{Attributes, Color, RenderConfig, StyleSheet, Styled};
 use inquire::validator::Validation;
-use inquire::{Confirm, CustomUserError, MultiSelect, Select, Text};
+use inquire::{Confirm, CustomUserError, InquireError, MultiSelect, Select, Text};
 use std::io::ErrorKind;
 use std::net::IpAddr;
 use std::path::PathBuf;
 
+/// Initialize the global inquire theme with Tokyo Night Storm colors.
+/// Call once at startup before any prompts.
+pub fn init_theme() {
+    inquire::set_global_render_config(tokyo_night_render_config());
+}
+
+/// Returns true if the error represents a user cancellation (Ctrl+C / Esc).
+pub fn is_user_cancel(err: &anyhow::Error) -> bool {
+    err.downcast_ref::<InquireError>()
+        .map(|e| {
+            matches!(
+                e,
+                InquireError::OperationCanceled | InquireError::OperationInterrupted
+            )
+        })
+        .unwrap_or(false)
+}
+
+/// Build a `RenderConfig` using the Tokyo Night Storm palette.
+fn tokyo_night_render_config() -> RenderConfig<'static> {
+    // Tokyo Night Storm palette
+    let primary = Color::rgb(122, 162, 247); // #7aa2f7
+    let green = Color::rgb(158, 206, 106); // #9ece6a
+    let foreground = Color::rgb(192, 202, 245); // #c0caf5
+    let muted = Color::rgb(86, 95, 137); // #565f89
+    let purple = Color::rgb(187, 154, 247); // #bb9af7
+    let secondary = Color::rgb(169, 177, 214); // #a9b1d6
+    let red = Color::rgb(247, 118, 142); // #f7768e
+
+    let mut config = RenderConfig::empty();
+
+    // Prompt prefix: ❯ in primary blue
+    config.prompt_prefix = Styled::new("❯").with_fg(primary);
+    // Answered prefix: ✓ in green
+    config.answered_prompt_prefix = Styled::new("✓").with_fg(green);
+    // Prompt text: bold foreground
+    config.prompt = StyleSheet::new()
+        .with_fg(foreground)
+        .with_attr(Attributes::BOLD);
+    // User answer: green
+    config.answer = StyleSheet::new().with_fg(green);
+    // Default value hint: muted
+    config.default_value = StyleSheet::new().with_fg(muted);
+    // Help message: muted
+    config.help_message = StyleSheet::new().with_fg(muted);
+    // Text input: foreground
+    config.text_input = StyleSheet::new().with_fg(foreground);
+    // Highlighted option prefix: ❯ in purple
+    config.highlighted_option_prefix = Styled::new("❯").with_fg(purple);
+    // Selected/highlighted option: purple
+    config.selected_option = Some(StyleSheet::new().with_fg(purple));
+    // Regular option: secondary
+    config.option = StyleSheet::new().with_fg(secondary);
+    // Selected checkbox: ✓ in green
+    config.selected_checkbox = Styled::new("✓").with_fg(green);
+    // Unselected checkbox: ○ muted
+    config.unselected_checkbox = Styled::new("○").with_fg(muted);
+    // Error message: ✗ prefix in red, message in red
+    config.error_message = config
+        .error_message
+        .with_prefix(Styled::new("✗").with_fg(red))
+        .with_message(StyleSheet::new().with_fg(red));
+    // Canceled indicator: muted
+    config.canceled_prompt_indicator = Styled::new("canceled").with_fg(muted);
+    // Scroll indicators: muted
+    config.scroll_up_prefix = Styled::new("▲").with_fg(muted);
+    config.scroll_down_prefix = Styled::new("▼").with_fg(muted);
+
+    config
+}
+
 /// File path autocompleter for interactive prompts.
 ///
-/// Provides tab-completion for file paths by scanning the filesystem
-/// based on current input.
+/// Provides tab-completion for file paths by scanning the filesystem.
+/// Directories are listed first (with trailing `/`), then files, both
+/// sorted alphabetically. Hidden entries (starting with `.`) are only
+/// shown when the user explicitly types a leading `.`.
 #[derive(Clone, Default)]
 struct FilePathCompleter {
     input: String,
@@ -20,6 +94,11 @@ struct FilePathCompleter {
 }
 
 impl FilePathCompleter {
+    /// Check whether `c` is a path separator on the current platform.
+    fn is_separator(c: char) -> bool {
+        c == '/' || c == std::path::MAIN_SEPARATOR
+    }
+
     fn update_input(&mut self, input: &str) -> Result<(), CustomUserError> {
         if input == self.input {
             return Ok(());
@@ -28,6 +107,7 @@ impl FilePathCompleter {
         self.input = input.to_owned();
         self.paths.clear();
 
+        let sep = std::path::MAIN_SEPARATOR;
         let input_path = std::path::PathBuf::from(input);
 
         let fallback_parent = input_path
@@ -41,33 +121,87 @@ impl FilePathCompleter {
             })
             .unwrap_or_else(|| std::path::PathBuf::from("."));
 
-        let scan_dir = if input.ends_with('/') {
-            input_path
+        let ends_with_sep = input.ends_with(|c: char| Self::is_separator(c));
+        let scan_dir = if ends_with_sep {
+            input_path.clone()
         } else {
             fallback_parent.clone()
         };
 
-        let entries = match std::fs::read_dir(scan_dir) {
+        let entries = match std::fs::read_dir(&scan_dir) {
             Ok(read_dir) => Ok(read_dir),
-            Err(err) if err.kind() == ErrorKind::NotFound => std::fs::read_dir(fallback_parent),
+            Err(err) if err.kind() == ErrorKind::NotFound => std::fs::read_dir(&fallback_parent),
             Err(err) => Err(err),
         }?
         .collect::<Result<Vec<_>, _>>()?;
 
-        let limit = 15;
-        for entry in entries.iter().take(limit + self.paths.len()) {
+        // Determine whether the user is typing a hidden-file prefix so we
+        // know whether to include dotfiles in suggestions.
+        let filename_prefix = if ends_with_sep {
+            ""
+        } else {
+            input_path
+                .file_name()
+                .map(|f| f.to_str().unwrap_or(""))
+                .unwrap_or("")
+        };
+        let show_hidden = filename_prefix.starts_with('.');
+
+        // Prefix used when scanning the cwd (".") — we strip this from
+        // display strings so suggestions look clean.
+        let cwd_prefix_unix = format!(".{}", '/');
+        let cwd_prefix_native = format!(".{}", sep);
+
+        // Collect matching entries, split into dirs and files for sorting.
+        let mut dirs: Vec<String> = Vec::new();
+        let mut files: Vec<String> = Vec::new();
+
+        for entry in &entries {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+
+            // Skip hidden entries unless the user typed a dot prefix.
+            if !show_hidden && name_str.starts_with('.') {
+                continue;
+            }
+
             let path = entry.path();
-            let path_str = if path.is_dir() {
-                format!("{}/", path.to_string_lossy())
+
+            // Build a clean display path, appending the platform separator
+            // for directories. Strip the leading "./" or ".\" that comes
+            // from scanning PathBuf::from(".").
+            let display = if path.is_dir() {
+                format!("{}{}", path.to_string_lossy(), sep)
             } else {
                 path.to_string_lossy().to_string()
             };
+            let display = display
+                .strip_prefix(&cwd_prefix_unix)
+                .or_else(|| display.strip_prefix(&cwd_prefix_native))
+                .unwrap_or(&display)
+                .to_string();
 
-            if path_str.starts_with(&self.input) && path_str.len() != self.input.len() {
-                self.paths.push(path_str);
-                if self.paths.len() >= limit {
-                    break;
-                }
+            // Only include entries that match what the user has typed so far.
+            if !display.starts_with(&self.input) || display.len() == self.input.len() {
+                continue;
+            }
+
+            if path.is_dir() {
+                dirs.push(display);
+            } else {
+                files.push(display);
+            }
+        }
+
+        // Sort each group alphabetically, then combine dirs-first.
+        dirs.sort();
+        files.sort();
+
+        let limit = 15;
+        for item in dirs.into_iter().chain(files) {
+            self.paths.push(item);
+            if self.paths.len() >= limit {
+                break;
             }
         }
 
@@ -79,11 +213,12 @@ impl FilePathCompleter {
     fn longest_common_prefix(&self) -> String {
         let mut ret = String::new();
 
-        let mut sorted = self.paths.clone();
-        sorted.sort();
-        if sorted.is_empty() {
+        if self.paths.is_empty() {
             return ret;
         }
+
+        let mut sorted = self.paths.clone();
+        sorted.sort();
 
         let mut first_word = sorted.first().unwrap().chars();
         let mut last_word = sorted.last().unwrap().chars();
@@ -115,7 +250,9 @@ impl Autocomplete for FilePathCompleter {
         Ok(match highlighted_suggestion {
             Some(suggestion) => Replacement::Some(suggestion),
             None => {
-                if self.lcp.is_empty() {
+                // Only auto-complete to LCP when the user has typed something;
+                // pressing Tab on an empty input shouldn't jump to a random prefix.
+                if self.lcp.is_empty() || self.input.is_empty() {
                     Replacement::None
                 } else {
                     Replacement::Some(self.lcp.clone())
@@ -355,10 +492,33 @@ pub fn prompt_post_operation() -> anyhow::Result<PostOperationAction> {
     })
 }
 
+/// Return the user's home directory with a trailing path separator.
+/// Falls back to an empty string if the home directory cannot be determined.
+fn home_dir_prefix() -> String {
+    let sep = std::path::MAIN_SEPARATOR;
+    // Use dirs-style lookup: HOME on Unix, USERPROFILE on Windows.
+    #[cfg(not(target_os = "windows"))]
+    let home = std::env::var("HOME");
+    #[cfg(target_os = "windows")]
+    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME"));
+
+    home.map(|h| {
+        if h.ends_with(sep) {
+            h
+        } else {
+            format!("{}{}", h, sep)
+        }
+    })
+    .unwrap_or_default()
+}
+
 /// Prompt for a file path, validating the file exists
 fn prompt_file_path(prompt: &str) -> anyhow::Result<PathBuf> {
+    let start = home_dir_prefix();
     let path = Text::new(prompt)
+        .with_initial_value(&start)
         .with_autocomplete(FilePathCompleter::default())
+        .with_help_message("Tab to autocomplete · Esc to cancel")
         .with_validator(|input: &str| {
             let p = PathBuf::from(input.trim());
             if p.is_file() {
@@ -375,8 +535,11 @@ fn prompt_file_path(prompt: &str) -> anyhow::Result<PathBuf> {
 
 /// Prompt for an optional file path (empty to skip)
 fn prompt_optional_file_path(prompt: &str) -> anyhow::Result<Option<PathBuf>> {
+    let start = home_dir_prefix();
     let path = Text::new(prompt)
+        .with_initial_value(&start)
         .with_autocomplete(FilePathCompleter::default())
+        .with_help_message("Tab to autocomplete · Esc to cancel")
         .with_default("")
         .prompt()?;
 
