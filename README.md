@@ -4,8 +4,10 @@ A comprehensive SSL/TLS diagnostic tool built in Rust. When run with no argument
 
 ## Features
 
-- **Interactive Main Menu**: Top-level menu offering domain checks, certificate inspection, verification, conversion, and quit — all with results in a scrollable TUI pager
+- **Interactive Main Menu**: Top-level menu offering domain checks, certificate inspection, verification, conversion, and quit — all with results in a scrollable TUI pager, themed with the Tokyo Night Storm palette
 - **Certificate File Operations**: Inspect, verify (key-pair matching and chain validation), and convert (PEM/DER/PKCS#12) certificate files — available from the menu or via the `cert` subcommand
+- **File Path Autocomplete**: Tab-completion on all file path prompts with directories sorted first, dotfile hiding, and cross-platform support
+- **Graceful Ctrl+C Handling**: Clean exit at any prompt with no error messages
 - **Non-Interactive Mode**: Automated checks for scripting and CI/CD pipelines
 - **JSON Output**: Machine-readable output for integration with other tools
 - **Quiet Mode**: Minimal output showing just the overall grade
@@ -160,8 +162,8 @@ Configuration files are located in the `config/` directory:
 | `b` / `PageUp` | Page up |
 | `g` / `Home` | Go to start |
 | `G` / `End` | Go to end |
-| `s` | Save HTML report (domain checks only) |
-| `n` | New check (returns to menu in menu mode, re-launches in direct mode) |
+| `s` | Save report (opens file explorer prompt with tab-completion) |
+| `n` | New check (clears screen, returns to menu or re-launches) |
 | `q` / `Esc` | Quit pager |
 
 ## Reports
@@ -199,14 +201,14 @@ src/
 ├── models/              # Data structures
 │   └── cert_comparison.rs # Cross-IP certificate comparison
 ├── output/              # CLI output formatting
-│   ├── banner.rs        # ASCII art banner
-│   ├── interactive.rs   # Dialoguer prompts (main menu, cert ops, domain)
+│   ├── banner.rs        # ASCII art banner, screen clear, refresh helpers
+│   ├── interactive.rs   # Inquire prompts, Tokyo Night theme, file path autocomplete
 │   ├── results.rs       # Formatted result display
 │   ├── tables.rs        # Table formatting (comfy-table)
 │   ├── grade.rs         # Grade display (A+ through F)
 │   ├── cert_chain.rs    # Certificate chain visualization
 │   ├── json.rs          # JSON output mode
-│   └── pager.rs         # Ratatui scrollable viewer (all operations)
+│   └── pager.rs         # Ratatui scrollable viewer (Tokyo Night themed)
 ├── report/              # HTML, iCal, PEM generation
 └── utils/               # Progress indicators, error types
 ```
@@ -217,7 +219,7 @@ Key dependencies:
 - `clap` - CLI parsing
 - `tokio` - Async runtime
 - `ratatui` + `crossterm` - Pager view (scrollable results)
-- `inquire` + `console` - Interactive CLI prompts
+- `inquire` + `console` - Interactive CLI prompts (Tokyo Night themed, file path autocomplete)
 - `comfy-table` - Table formatting
 - `hickory-resolver` - DNS resolution
 - `rustls` - Modern TLS (1.2/1.3)

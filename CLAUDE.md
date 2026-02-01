@@ -91,14 +91,14 @@ src/
 │   ├── test_result.rs
 │   └── report_card.rs
 ├── output/              # CLI output formatting
-│   ├── banner.rs        # ASCII art banner
-│   ├── interactive.rs   # Dialoguer prompts (main menu, domain, IP, port, cert ops)
+│   ├── banner.rs        # ASCII art banner, screen clear, refresh helpers
+│   ├── interactive.rs   # Inquire prompts, Tokyo Night theme, file path autocomplete
 │   ├── results.rs       # Formatted result display
 │   ├── tables.rs        # Table formatting (comfy-table)
 │   ├── grade.rs         # Grade display (A+ through F)
 │   ├── cert_chain.rs    # Certificate chain visualization
 │   ├── json.rs          # JSON output mode
-│   └── pager.rs         # Ratatui scrollable viewer
+│   └── pager.rs         # Ratatui scrollable viewer (Tokyo Night themed)
 ├── report/              # HTML, iCal, PEM generation
 └── utils/               # Progress indicators, error types
 ```
@@ -318,7 +318,7 @@ git push origin v0.1.0
 2. **Update docs at every step** - Keep documentation current
 3. **Prefer editing over creating** - Modify existing files when possible
 4. **Test on multiple platforms** - macOS, Linux, Windows
-5. **Pager keys**: `↑/k` (up), `↓/j` (down), `s` (save report), `n` (new check / back to menu), `q` (quit pager). The pager is used for both domain check results and certificate file operation results.
+5. **Pager keys**: `↑/k` (up), `↓/j` (down), `Space` (page down), `b` (page up), `g`/`G` (top/bottom), `s` (save report via file explorer prompt), `n` (new check / back to menu), `q` (quit pager). The pager uses Tokyo Night Storm colours and is used for both domain check results and certificate file operation results.
 6. **Handle network timeouts gracefully** - Use mock servers in tests
 7. **Implement WHOIS rate limiting** - Caching + exponential backoff
 
@@ -330,3 +330,5 @@ git push origin v0.1.0
 - Correct border alignment across terminals
 - HTML reports work in major browsers
 - >80% code coverage on core modules
+- Ctrl+C at any prompt exits cleanly (no error messages)
+- All interactive prompts use Tokyo Night Storm theme

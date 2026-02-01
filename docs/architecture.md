@@ -71,9 +71,11 @@ flowchart TB
 The main entry point handles:
 - CLI argument parsing using Clap
 - Configuration loading
-- **Interactive menu mode**: When run with no arguments and a TTY is available, shows a banner and a top-level menu (Check a domain, Inspect certificate file(s), Verify certificate & key, Convert certificate format, Quit). After each operation, a post-operation prompt offers to return to the menu or quit.
+- Calling `interactive::init_theme()` to apply the Tokyo Night Storm inquire theme globally
+- **Interactive menu mode**: When run with no arguments and a TTY is available, shows a banner and a top-level menu (Check a domain, Inspect certificate file(s), Verify certificate & key, Convert certificate format, Quit). After each operation, a post-operation prompt offers to return to the menu or quit. The screen is cleared and the banner redrawn when returning to the menu.
 - **Direct CLI mode**: When a domain is provided via `--domain` or a `cert` subcommand is used, skips the menu and runs the operation directly.
 - Mode selection (interactive CLI, non-interactive, JSON, quiet)
+- Graceful Ctrl+C handling: all prompt sites use `is_user_cancel()` to detect cancellation and exit cleanly without error messages
 - Top-level error handling
 
 The menu loop delegates to:
@@ -352,20 +354,24 @@ classDiagram
 
 Handles all CLI output formatting and user interaction:
 
-- **banner.rs**: ASCII art banner display
-- **interactive.rs**: Interactive prompts using `inquire`:
+- **banner.rs**: ASCII art banner display, `clear_screen()` and `refresh_banner()` helpers for redrawing the banner when returning to the main menu
+- **interactive.rs**: Interactive prompts using `inquire` with a custom Tokyo Night Storm theme:
+  - `init_theme()` — sets the global `RenderConfig` with Tokyo Night Storm colours (blue `❯` prefix, green `✓` answered, purple highlighted options, etc.)
+  - `is_user_cancel()` — detects Ctrl+C / Esc from `anyhow::Error` (checks for `InquireError::OperationCanceled` and `OperationInterrupted`)
   - `prompt_main_menu()` — top-level menu (domain check, cert info/verify/convert, quit)
   - `prompt_post_operation()` — "Run another check" / "Quit" after each operation
   - `prompt_domain()`, `prompt_port()`, `prompt_ip_selection()` — domain check prompts
   - `prompt_cert_info_interactive()`, `prompt_cert_verify_interactive()`, `prompt_cert_convert_interactive()` — certificate file operation prompts
+  - `prompt_file_path()`, `prompt_optional_file_path()` — file path prompts with tab-completion `FilePathCompleter` (sorts dirs first, hides dotfiles, cross-platform separators, starts from home directory)
+  - `prompt_report_path()` — save report prompt with `FilePathCompleter` starting from cwd
 - **results.rs**: Formatted check result display with status icons and colored output
 - **tables.rs**: Table formatting using `comfy-table`
 - **grade.rs**: Visual grade display (A+ through F) with score bars
 - **cert_chain.rs**: Certificate chain visualization
 - **json.rs**: JSON output mode for scripting
-- **pager.rs**: Ratatui-based scrollable viewer used for both domain check results and certificate file operation results
+- **pager.rs**: Ratatui-based scrollable viewer used for both domain check results and certificate file operation results. Themed with Tokyo Night Storm colours (blue header, muted border status bar, green/red flash messages). Save (`s` key) temporarily exits the alternate screen and shows an `inquire` prompt with `FilePathCompleter` for choosing the output path.
 
-The interactive flow uses a menu loop: the main menu collects a choice, the chosen operation runs and displays results in the pager, then the post-operation prompt returns to the menu or quits.
+The interactive flow uses a menu loop: the main menu collects a choice, the chosen operation runs and displays results in the pager, then the post-operation prompt returns to the menu or quits. Ctrl+C at any prompt exits cleanly — main menu cancel breaks the loop, sub-prompt cancel returns to the menu with a banner refresh, and CLI-mode cancel calls `process::exit(0)`.
 
 ### Report Module (`src/report/`)
 

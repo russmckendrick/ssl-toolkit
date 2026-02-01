@@ -88,6 +88,42 @@ Before the pager, the application uses `inquire` for sequential prompts:
 
 These are standard terminal prompts, not a TUI.
 
+All prompts use a custom Tokyo Night Storm `RenderConfig` set globally via `interactive::init_theme()`:
+
+| Element | Symbol | Color |
+|---------|--------|-------|
+| Prompt prefix | `❯` | `#7aa2f7` primary blue |
+| Answered prefix | `✓` | `#9ece6a` pass green |
+| Prompt text | **Bold** | `#c0caf5` foreground |
+| User answer | — | `#9ece6a` pass green |
+| Default value hint | — | `#565f89` muted |
+| Help message | — | `#565f89` muted |
+| Text input | — | `#c0caf5` foreground |
+| Highlighted option | `❯` | `#bb9af7` highlight purple |
+| Selected option | — | `#bb9af7` highlight purple |
+| Regular option | — | `#a9b1d6` secondary |
+| Selected checkbox | `✓` | `#9ece6a` green |
+| Unselected checkbox | `○` | `#565f89` muted |
+| Error prefix | `✗` | `#f7768e` fail red |
+| Error message | — | `#f7768e` fail red |
+| Canceled indicator | `canceled` | `#565f89` muted |
+| Scroll up / down | `▲` / `▼` | `#565f89` muted |
+
+### File Path Autocomplete
+
+File path prompts (`prompt_file_path`, `prompt_optional_file_path`, `prompt_report_path`) use a custom `FilePathCompleter` with:
+- Starts from the user's home directory (or cwd for report save)
+- Tab-completion with directories sorted first, then files alphabetically
+- Dotfiles hidden unless the user types `.`
+- Cross-platform support: uses `MAIN_SEPARATOR`, handles both `/` and `\`, uses `USERPROFILE` on Windows
+
+### Ctrl+C / Esc Handling
+
+All prompt sites wrap errors with `is_user_cancel()` to detect `InquireError::OperationCanceled` and `OperationInterrupted`. Cancellation behaviour:
+- **Main menu**: breaks the loop (clean exit)
+- **Sub-prompts** (domain, port, file paths): returns to the main menu with a screen clear and banner refresh
+- **CLI mode prompts**: calls `process::exit(0)`
+
 ---
 
 ## Nesting Rules
@@ -228,16 +264,24 @@ The spinner cycles through these frames at 80ms intervals:
 | `b` / `PageUp` | Page up |
 | `g` / `Home` | Go to start |
 | `G` / `End` | Go to end |
-| `s` | Save report |
-| `n` | Start new check |
+| `s` | Save report (opens file explorer prompt) |
+| `n` | Start new check (clears screen, shows banner) |
 | `q` / `Esc` | Quit |
 
 ### Pager Status Bar
 
-The status bar at the bottom of the pager displays:
-- Current scroll position
-- Available keyboard shortcuts
-- Save/quit actions
+The status bar at the bottom of the pager uses Tokyo Night Storm colours:
+- **Normal state**: muted border background (`#565f89`) with dark text (`#24283b`), showing scroll position (left) and keyboard hints (right)
+- **Flash messages**: full-width coloured bar with dark text — green (`#9ece6a`) for save success, red (`#f7768e`) for errors/cancellation, blue (`#7aa2f7`) for info
+
+### Pager Save Flow
+
+Pressing `s` in the pager:
+1. Temporarily exits the ratatui alternate screen and disables raw mode
+2. Shows an `inquire::Text` prompt with `FilePathCompleter` (starts from cwd, pre-filled with a default filename)
+3. On confirm: saves the report and shows a green flash message
+4. On cancel (Ctrl+C/Esc): shows a red "Save cancelled" flash message
+5. Re-enters the alternate screen and resumes the pager
 
 ---
 
